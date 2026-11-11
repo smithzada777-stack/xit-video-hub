@@ -70,7 +70,7 @@ def get_channel_info(channel_input: str) -> Optional[Dict[str, Any]]:
             print(f"Error fetching channel info: {e}")
             return None
 
-def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 150) -> List[Dict[str, Any]]:
+def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 200) -> List[Dict[str, Any]]:
     clean_url = clean_channel_url(channel_url)
     videos = []
     seen_ids = set()
@@ -82,13 +82,18 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 15
         'no_warnings': True
     }
 
-    # 1. Primary Method: Official YouTube Uploads Playlist (UU...)
-    if channel_id and channel_id.startswith("UC"):
-        uploads_playlist_url = f"https://www.youtube.com/playlist?list=UU{channel_id[2:]}"
+    # 1. Primary Method: Fetch directly from /videos tab and /shorts tab for 100% faithful categorization
+    tabs = [
+        (f"{clean_url}/videos", False),
+        (f"{clean_url}/shorts", True)
+    ]
+    for target_url, force_short in tabs:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(uploads_playlist_url, download=False)
-                for entry in info.get('entries', []):
+                info = ydl.extract_info(target_url, download=False)
+                entries = info.get('entries', []) or []
+                total_entries = len(entries)
+                for idx, entry in enumerate(entries):
                     if not entry:
                         continue
                     v_id = entry.get('id')
@@ -97,9 +102,51 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 15
                     seen_ids.add(v_id)
 
                     duration = entry.get('duration') or 0
-                    is_short = (duration > 0 and duration <= 60) or ("/shorts/" in entry.get('url', ''))
                     thumbs = entry.get('thumbnails', [])
                     thumb_url = thumbs[-1]['url'] if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
+                    # Synthetic sort rank if upload_date is None (YouTube gives newest first in tabs)
+                    # Higher number = newer upload
+                    synth_rank = total_entries - idx
+                    pub_date = entry.get('upload_date') or f"idx_{synth_rank:04d}"
+
+                    videos.append({
+                        "id": v_id,
+                        "channel_id": channel_id,
+                        "title": entry.get('title') or "Sem título",
+                        "duration": int(duration),
+                        "thumbnail": thumb_url,
+                        "is_short": force_short,
+                        "status": "pending",
+                        "tags": "pending",
+                        "url": f"https://www.youtube.com/watch?v={v_id}",
+                        "published_at": pub_date
+                    })
+        except Exception as e:
+            print(f"Error fetching {target_url}: {e}")
+
+    # 2. Fallback if tabs returned nothing (legacy channel or direct playlist)
+    if len(videos) == 0 and channel_id and channel_id.startswith("UC"):
+        uploads_playlist_url = f"https://www.youtube.com/playlist?list=UU{channel_id[2:]}"
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(uploads_playlist_url, download=False)
+                entries = info.get('entries', []) or []
+                total_entries = len(entries)
+                for idx, entry in enumerate(entries):
+                    if not entry:
+                        continue
+                    v_id = entry.get('id')
+                    if not v_id or v_id in seen_ids:
+                        continue
+                    seen_ids.add(v_id)
+
+                    duration = entry.get('duration') or 0
+                    is_short = "/shorts/" in entry.get('url', '')
+                    thumbs = entry.get('thumbnails', [])
+                    thumb_url = thumbs[-1]['url'] if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+                    synth_rank = total_entries - idx
+                    pub_date = entry.get('upload_date') or f"idx_{synth_rank:04d}"
 
                     videos.append({
                         "id": v_id,
@@ -111,48 +158,10 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 15
                         "status": "pending",
                         "tags": "pending",
                         "url": f"https://www.youtube.com/watch?v={v_id}",
-                        "published_at": entry.get('upload_date')
+                        "published_at": pub_date
                     })
         except Exception as e:
             print(f"Uploads playlist extraction error: {e}")
-
-    # 2. Secondary fallback / supplement: /videos and /shorts tabs
-    if len(videos) < 5:
-        tabs = [
-            (f"{clean_url}/videos", False),
-            (f"{clean_url}/shorts", True)
-        ]
-        for target_url, force_short in tabs:
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(target_url, download=False)
-                    for entry in info.get('entries', []):
-                        if not entry:
-                            continue
-                        v_id = entry.get('id')
-                        if not v_id or v_id in seen_ids:
-                            continue
-                        seen_ids.add(v_id)
-
-                        duration = entry.get('duration') or 0
-                        is_short = force_short or (duration > 0 and duration <= 60) or ("/shorts/" in entry.get('url', ''))
-                        thumbs = entry.get('thumbnails', [])
-                        thumb_url = thumbs[-1]['url'] if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
-
-                        videos.append({
-                            "id": v_id,
-                            "channel_id": channel_id,
-                            "title": entry.get('title') or "Sem título",
-                            "duration": int(duration),
-                            "thumbnail": thumb_url,
-                            "is_short": is_short,
-                            "status": "pending",
-                            "tags": "pending",
-                            "url": f"https://www.youtube.com/watch?v={v_id}",
-                            "published_at": entry.get('upload_date')
-                        })
-            except Exception as e:
-                pass
 
     return videos
 
@@ -160,7 +169,8 @@ def get_real_video_formats(video_id: str) -> List[Dict[str, Any]]:
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
         'quiet': True,
-        'no_warnings': True
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android_vr', 'web']}}
     }
     formats_list = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

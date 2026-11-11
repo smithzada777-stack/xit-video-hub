@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import uuid
 import asyncio
+import unicodedata
 import requests
 from typing import Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
@@ -253,35 +254,29 @@ async def download_video(video_id: str, quality: str = "720p", format_id: Option
     temp_dir = tempfile.gettempdir()
     output_template = os.path.join(temp_dir, f"xit_{video_id}_{uuid.uuid4().hex[:6]}.%(ext)s")
 
-    # Format selection for maximum iOS compatibility
     is_audio = quality == "audio"
     if is_audio:
         ydl_opts = {
-            'format': 'bestaudio/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': output_template,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
+            'extractor_args': {'youtube': {'player_client': ['android_vr', 'web']}},
             'quiet': True,
             'no_warnings': True
         }
     else:
-        # Choose matching resolution and enforce mp4 for iOS Photos
-        if format_id and "bestvideo" in format_id:
-            fmt = format_id
+        if format_id and format_id.isdigit():
+            fmt = f"{format_id}/best[ext=mp4]/best"
         elif quality == "1080p":
-            fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best"
+            fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/22/18/best"
         elif quality == "720p":
-            fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best"
+            fmt = "22/bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/18/best"
         else:
-            fmt = "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+            fmt = "18/best[height<=480][ext=mp4]/best[ext=mp4]/best"
 
         ydl_opts = {
             'format': fmt,
             'outtmpl': output_template,
-            'merge_output_format': 'mp4',
+            'extractor_args': {'youtube': {'player_client': ['android_vr', 'web']}},
             'quiet': True,
             'no_warnings': True
         }
@@ -290,29 +285,41 @@ async def download_video(video_id: str, quality: str = "720p", format_id: Option
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
-            if is_audio:
-                filename = os.path.splitext(filename)[0] + ".mp3"
-            elif not filename.endswith(".mp4") and os.path.exists(os.path.splitext(filename)[0] + ".mp4"):
-                filename = os.path.splitext(filename)[0] + ".mp4"
+            base_no_ext = os.path.splitext(filename)[0]
 
-            if not os.path.exists(filename):
-                raise HTTPException(status_code=500, detail="Erro ao processar download do vídeo.")
+            # Find matching actual file on disk
+            actual_file = filename
+            if not os.path.exists(actual_file):
+                for candidate in [base_no_ext + ".mp4", base_no_ext + ".m4a", base_no_ext + ".webm", base_no_ext + ".mp3"]:
+                    if os.path.exists(candidate):
+                        actual_file = candidate
+                        break
 
-            # Mark as downloaded in DB
-            db.update_video_status(video_id, "downloaded")
+            if not os.path.exists(actual_file):
+                raise HTTPException(status_code=500, detail="Erro ao localizar arquivo baixado.")
 
-            clean_title = "".join(c for c in (info.get("title") or "video") if c.isalnum() or c in (' ', '_', '-')).strip()
-            download_filename = f"{clean_title}.{'mp3' if is_audio else 'mp4'}"
+            ext = os.path.splitext(actual_file)[1].lstrip('.') or ('mp3' if is_audio else 'mp4')
+            raw_title = info.get("title") or "video"
+            # Normalize and remove non-ascii/accents so HTTP header Content-Disposition is 100% valid ASCII
+            nfkd = unicodedata.normalize('NFKD', raw_title)
+            ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+            clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
+            download_filename = f"{clean_title}.{ext}"
 
-            # Auto-delete after streaming
-            background_tasks.add_task(remove_temp_file, filename)
+            # Auto mark video as downloaded in DB
+            db.batch_update_tags([video_id], "downloaded")
+
+            background_tasks.add_task(remove_temp_file, actual_file)
+
+            media_type = "audio/mpeg" if ext == "mp3" else "audio/mp4" if ext == "m4a" else "video/mp4"
 
             return FileResponse(
-                path=filename,
+                path=actual_file,
                 filename=download_filename,
-                media_type="audio/mpeg" if is_audio else "video/mp4"
+                media_type=media_type
             )
     except Exception as e:
+        print(f"Download error: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao baixar: {str(e)}")
 
 if __name__ == "__main__":
