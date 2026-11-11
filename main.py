@@ -111,8 +111,8 @@ async def add_channel(payload: AddChannelRequest):
     
     db.save_channel(info)
     
-    # Auto-fetch first batch of videos
-    videos = fetch_videos_from_channel(info["url"], info["id"], limit=40)
+    # Auto-fetch all recent/available videos
+    videos = fetch_videos_from_channel(info["url"], info["id"], limit=150)
     if videos:
         db.save_videos(videos)
 
@@ -130,7 +130,7 @@ async def sync_channel(channel_id: str):
     if not target:
         raise HTTPException(status_code=404, detail="Canal não encontrado")
     
-    videos = fetch_videos_from_channel(target["url"], channel_id, limit=60)
+    videos = fetch_videos_from_channel(target["url"], channel_id, limit=200)
     if videos:
         db.save_videos(videos)
     return {"status": "synced", "count": len(videos)}
