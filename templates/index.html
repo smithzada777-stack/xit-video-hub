@@ -411,6 +411,15 @@
         </div>
       </div>
 
+      <!-- Opção de Download Direto 1080p / Alta Velocidade -->
+      <a id="btnExternalDownload" href="#" target="_blank" onclick="markCurrentVideoDownloaded()" class="w-full flex items-center justify-between p-2.5 rounded-xl bg-white text-black font-bold text-xs active:scale-98 transition-all">
+        <span class="flex items-center space-x-1.5">
+          <span>⚡</span>
+          <span>Download Alternativo (1080p / Rápido)</span>
+        </span>
+        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+      </a>
+
       <div class="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400 flex items-start space-x-2">
         <i data-lucide="smartphone" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-white"></i>
         <span>No <strong>iPhone / Safari / PWA</strong>: ao baixar, o arquivo vai para o aplicativo <em>Arquivos &gt; Downloads</em>, onde você pode compartilhar ou <em>Salvar Vídeo</em> no Fotos!</span>
@@ -1209,11 +1218,28 @@
     }
 
     // DOWNLOAD MODAL
+    let currentDownloadingVideoId = null;
+
+    function markCurrentVideoDownloaded() {
+      if (currentDownloadingVideoId) {
+        const v = currentVideos.find(x => x.id === currentDownloadingVideoId);
+        if (v) {
+          if (!Array.isArray(v.tags)) v.tags = [v.tags || 'pending'];
+          if (!v.tags.includes('downloaded')) v.tags.push('downloaded');
+          renderVideos();
+        }
+      }
+    }
+
     async function openDownloadModal(videoId, title) {
+      currentDownloadingVideoId = videoId;
       openModal('downloadModal');
       document.getElementById('downloadVideoTitle').innerText = title;
       const notice = document.getElementById('downloadStatusNotice');
       if (notice) notice.classList.add('hidden');
+      
+      const extBtn = document.getElementById('btnExternalDownload');
+      if (extBtn) extBtn.href = `https://ssyoutube.com/watch?v=${videoId}`;
       
       const list = document.getElementById('formatsList');
       list.innerHTML = `

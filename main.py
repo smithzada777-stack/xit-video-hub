@@ -68,7 +68,7 @@ class GenerateScriptRequest(BaseModel):
 @app.get("/healthz")
 @app.get("/ping")
 async def health_check():
-    return {"status": "ok", "app": "XIT Studio", "service": "alive"}
+    return {"status": "ok", "app": "XIT Studio", "service": "alive", "ytdlp": yt_dlp.version.__version__}
 
 # PWA Files
 @app.get("/manifest.json")
@@ -281,46 +281,59 @@ async def download_video(video_id: str, quality: str = "720p", format_id: Option
             'no_warnings': True
         }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            base_no_ext = os.path.splitext(filename)[0]
+    clients_to_try = [['android_vr'], ['ios'], ['android'], ['tv'], ['mweb']]
+    last_err = None
+    info = None
+    actual_file = None
 
-            # Find matching actual file on disk
-            actual_file = filename
-            if not os.path.exists(actual_file):
-                for candidate in [base_no_ext + ".mp4", base_no_ext + ".m4a", base_no_ext + ".webm", base_no_ext + ".mp3"]:
+    for client_list in clients_to_try:
+        ydl_opts['extractor_args'] = {'youtube': {'player_client': client_list}}
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                base_no_ext = os.path.splitext(filename)[0]
+
+                # Check candidates
+                for candidate in [filename, base_no_ext + ".mp4", base_no_ext + ".m4a", base_no_ext + ".webm", base_no_ext + ".mp3"]:
                     if os.path.exists(candidate):
                         actual_file = candidate
                         break
 
-            if not os.path.exists(actual_file):
-                raise HTTPException(status_code=500, detail="Erro ao localizar arquivo baixado.")
+                if actual_file and os.path.exists(actual_file):
+                    last_err = None
+                    break
+        except Exception as e:
+            last_err = e
+            continue
 
-            ext = os.path.splitext(actual_file)[1].lstrip('.') or ('mp3' if is_audio else 'mp4')
-            raw_title = info.get("title") or "video"
-            # Normalize and remove non-ascii/accents so HTTP header Content-Disposition is 100% valid ASCII
-            nfkd = unicodedata.normalize('NFKD', raw_title)
-            ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
-            clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
-            download_filename = f"{clean_title}.{ext}"
+    if not actual_file or not os.path.exists(actual_file):
+        raise HTTPException(status_code=500, detail=f"Erro ao baixar: {str(last_err or 'Arquivo não gerado')}")
 
-            # Auto mark video as downloaded in DB
-            db.batch_update_tags([video_id], "downloaded")
+    try:
+        ext = os.path.splitext(actual_file)[1].lstrip('.') or ('mp3' if is_audio else 'mp4')
+        raw_title = (info.get("title") if info else None) or "video"
+        # Normalize and remove non-ascii/accents so HTTP header Content-Disposition is 100% valid ASCII
+        nfkd = unicodedata.normalize('NFKD', raw_title)
+        ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+        clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
+        download_filename = f"{clean_title}.{ext}"
 
-            background_tasks.add_task(remove_temp_file, actual_file)
+        # Auto mark video as downloaded in DB
+        db.batch_update_tags([video_id], "downloaded")
 
-            media_type = "audio/mpeg" if ext == "mp3" else "audio/mp4" if ext == "m4a" else "video/mp4"
+        background_tasks.add_task(remove_temp_file, actual_file)
 
-            return FileResponse(
-                path=actual_file,
-                filename=download_filename,
-                media_type=media_type
-            )
+        media_type = "audio/mpeg" if ext == "mp3" else "audio/mp4" if ext == "m4a" else "video/mp4"
+
+        return FileResponse(
+            path=actual_file,
+            filename=download_filename,
+            media_type=media_type
+        )
     except Exception as e:
-        print(f"Download error: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao baixar: {str(e)}")
+        print(f"Download processing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
