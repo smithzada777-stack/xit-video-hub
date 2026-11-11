@@ -73,8 +73,12 @@ async def manifest():
 
 # Frontend Home
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def index():
+    try:
+        with open("templates/index.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except Exception as e:
+        return HTMLResponse(content=f"<h1>Erro ao carregar template: {str(e)}</h1>", status_code=500)
 
 # API: Channels
 @app.get("/api/channels")
