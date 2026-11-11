@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>XIT Studio - Criador de Cortes & Roteiros</title>
+  
+  <!-- iOS PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="XIT Studio" />
+  <meta name="theme-color" content="#090d16" />
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              cyan: '#00f2fe',
+              purple: '#7928ca',
+              dark: '#090d16',
+              card: '#121826',
+              border: '#1f293d'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    body {
+      background-color: #090d16;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .glass {
+      background: rgba(18, 24, 38, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased select-none pb-20">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-40 glass border-b border-brand-border px-4 py-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 to-purple-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i data-lucide="zap" class="w-5 h-5 text-black stroke-[2.5]"></i>
+        </div>
+        <div>
+          <h1 class="font-extrabold text-base tracking-wide text-white leading-none">XIT STUDIO</h1>
+          <span class="text-[10px] text-cyan-400 font-medium">Cortes & Roteiros IA</span>
+        </div>
+      </div>
+      
+      <button onclick="openModal('addChannelModal')" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-semibold shadow-md active:scale-95 transition-transform">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Canal</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="flex-1 px-4 py-3 space-y-4 max-w-lg mx-auto w-full">
+
+    <!-- CHANNELS HORIZONTAL LIST -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Canais Salvos</span>
+        <span id="channelCount" class="text-[11px] text-slate-500">0 canais</span>
+      </div>
+      <div id="channelList" class="flex space-x-3 overflow-x-auto hide-scrollbar py-1">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="space-y-2">
+      <!-- Type Filter: Todos | Videos | Shorts -->
+      <div class="flex rounded-xl bg-slate-900/90 p-1 border border-brand-border">
+        <button onclick="setTypeFilter('all')" id="btnFilterAll" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors bg-cyan-500 text-black shadow">Todos</button>
+        <button onclick="setTypeFilter('video')" id="btnFilterVideo" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors text-slate-400 hover:text-white">Vídeos</button>
+        <button onclick="setTypeFilter('short')" id="btnFilterShort" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors text-slate-400 hover:text-white">Shorts</button>
+      </div>
+
+      <!-- Status Filter Chips -->
+      <div class="flex items-center space-x-2 overflow-x-auto hide-scrollbar py-1">
+        <button onclick="setStatusFilter('all')" id="statusAll" class="px-3 py-1 rounded-full text-[11px] font-semibold border border-cyan-500/50 bg-cyan-500/10 text-cyan-300">Todos Status</button>
+        <button onclick="setStatusFilter('pending')" id="statusPending" class="px-3 py-1 rounded-full text-[11px] font-semibold border border-brand-border bg-slate-900 text-slate-400">⏳ Pendentes</button>
+        <button onclick="setStatusFilter('downloaded')" id="statusDownloaded" class="px-3 py-1 rounded-full text-[11px] font-semibold border border-brand-border bg-slate-900 text-slate-400">⬇️ Baixados</button>
+        <button onclick="setStatusFilter('posted')" id="statusPosted" class="px-3 py-1 rounded-full text-[11px] font-semibold border border-brand-border bg-slate-900 text-slate-400">✅ Postados</button>
+      </div>
+    </div>
+
+    <!-- CHANNEL ACTIONS & VIDEO STATS -->
+    <div class="flex items-center justify-between pt-1">
+      <div id="currentChannelInfo" class="flex items-center space-x-2">
+        <span class="text-xs text-slate-400 font-medium" id="currentChannelTitle">Nenhum canal selecionado</span>
+      </div>
+      <button id="btnSyncChannel" onclick="syncCurrentChannel()" class="hidden flex items-center space-x-1 text-xs text-cyan-400 active:scale-95 transition-transform">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="syncIcon"></i>
+        <span>Atualizar Vídeos</span>
+      </button>
+    </div>
+
+    <!-- VIDEOS LIST CONTAINER -->
+    <div id="videoContainer" class="space-y-3">
+      <!-- Loading or empty message -->
+      <div class="text-center py-12 text-slate-500 text-xs">
+        <i data-lucide="youtube" class="w-10 h-10 mx-auto mb-2 text-slate-600"></i>
+        Adicione ou selecione um canal acima para ver os vídeos.
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: ADD CHANNEL -->
+  <div id="addChannelModal" class="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="w-full max-w-md bg-brand-card rounded-t-3xl sm:rounded-2xl border border-brand-border p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-base text-white">Adicionar Canal do YouTube</h3>
+        <button onclick="closeModal('addChannelModal')" class="text-slate-400 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-400">Cole o link do canal ou o @ do YouTube (ex: @MrBeast ou o link completo).</p>
+      
+      <div class="space-y-3">
+        <input id="inputChannelUrl" type="text" placeholder="https://youtube.com/@canal ou @canal" class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-brand-border text-white text-sm focus:border-cyan-400 focus:outline-none" />
+        <button id="btnAddChannelSubmit" onclick="submitAddChannel()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-bold text-sm flex items-center justify-center space-x-2 active:scale-98 transition-transform">
+          <span>Puxar Vídeos e Salvar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AI SCRIPT & HOOKS -->
+  <div id="scriptModal" class="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="w-full max-w-lg bg-brand-card rounded-t-3xl sm:rounded-2xl border border-brand-border p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-brand-border pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
+          <h3 class="font-bold text-base text-white">Roteiro & Estratégia Viral</h3>
+        </div>
+        <button onclick="closeModal('scriptModal')" class="text-slate-400 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="scriptLoading" class="py-12 text-center space-y-3">
+        <div class="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p class="text-xs text-purple-300 font-medium">IA gerando ganchos apelativos e roteiro sem repetição...</p>
+      </div>
+
+      <div id="scriptContent" class="space-y-4 hidden text-xs">
+        <!-- 3 HOOKS -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-cyan-400 uppercase tracking-wider text-[11px]">🎣 3 Ganchos de Impacto (0 a 3s)</span>
+          </div>
+          <div class="space-y-2">
+            <div class="p-2.5 rounded-xl bg-slate-900 border border-brand-border flex justify-between items-start gap-2">
+              <span id="hook1Text" class="text-slate-200"></span>
+              <button onclick="copyText('hook1Text')" class="shrink-0 p-1.5 text-cyan-400 hover:text-white bg-slate-800 rounded-lg"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-900 border border-brand-border flex justify-between items-start gap-2">
+              <span id="hook2Text" class="text-slate-200"></span>
+              <button onclick="copyText('hook2Text')" class="shrink-0 p-1.5 text-cyan-400 hover:text-white bg-slate-800 rounded-lg"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-900 border border-brand-border flex justify-between items-start gap-2">
+              <span id="hook3Text" class="text-slate-200"></span>
+              <button onclick="copyText('hook3Text')" class="shrink-0 p-1.5 text-cyan-400 hover:text-white bg-slate-800 rounded-lg"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- BODY SCRIPT -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-purple-400 uppercase tracking-wider text-[11px]">📜 Corpo do Roteiro & Cortes</span>
+            <button onclick="copyText('bodyText')" class="text-purple-400 flex items-center space-x-1 text-[11px]"><i data-lucide="copy" class="w-3 h-3"></i><span>Copiar</span></button>
+          </div>
+          <div id="bodyText" class="p-3 rounded-xl bg-slate-900 border border-brand-border text-slate-200 whitespace-pre-line leading-relaxed"></div>
+        </div>
+
+        <!-- CTA -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-400 uppercase tracking-wider text-[11px]">🎯 CTA Matador (Conversão)</span>
+            <button onclick="copyText('ctaText')" class="text-amber-400 flex items-center space-x-1 text-[11px]"><i data-lucide="copy" class="w-3 h-3"></i><span>Copiar</span></button>
+          </div>
+          <div id="ctaText" class="p-2.5 rounded-xl bg-slate-900 border border-brand-border text-slate-200"></div>
+        </div>
+
+        <!-- THUMBNAIL PROMPT -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">🎨 Prompt de Capa (Midjourney / Bing)</span>
+            <button onclick="copyText('thumbPromptText')" class="text-emerald-400 flex items-center space-x-1 text-[11px]"><i data-lucide="copy" class="w-3 h-3"></i><span>Copiar</span></button>
+          </div>
+          <div id="thumbPromptText" class="p-2.5 rounded-xl bg-slate-900 border border-brand-border text-slate-300 italic"></div>
+          <div class="text-[11px] text-slate-400">Texto sugerido na capa: <strong id="thumbOverlayText" class="text-white"></strong></div>
+        </div>
+
+        <button onclick="copyFullScript()" class="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center space-x-2 active:scale-98 transition-transform">
+          <i data-lucide="check-check" class="w-4 h-4"></i>
+          <span>Copiar Roteiro Completo</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DOWNLOAD QUALITIES -->
+  <div id="downloadModal" class="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="w-full max-w-md bg-brand-card rounded-t-3xl sm:rounded-2xl border border-brand-border p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-base text-white">Baixar Vídeo Fiel</h3>
+        <button onclick="closeModal('downloadModal')" class="text-slate-400 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-400" id="downloadVideoTitle">Carregando qualidades reais...</p>
+
+      <!-- FORMATS LIST -->
+      <div id="formatsList" class="space-y-2">
+        <div class="py-8 text-center text-xs text-cyan-400">
+          <div class="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          Identificando qualidades fiéis no YouTube...
+        </div>
+      </div>
+
+      <!-- iOS TIP -->
+      <div class="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/20 text-[11px] text-cyan-300 flex items-start space-x-2">
+        <i data-lucide="smartphone" class="w-4 h-4 shrink-0 mt-0.5 text-cyan-400"></i>
+        <span><strong>No iPhone:</strong> Ao tocar no botão de baixar, toque em <em>Baixar</em>. Quando terminar, abra o arquivo, clique em <em>Compartilhar</em> e escolha <strong>Salvar Vídeo</strong> para ir direto ao Fotos!</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass border border-brand-border px-4 py-2 rounded-full text-xs font-semibold text-white shadow-xl opacity-0 pointer-events-none transition-opacity duration-200">
+    Texto copiado!
+  </div>
+
+  <script>
+    let channels = [];
+    let currentChannelId = null;
+    let currentFilterType = 'all';
+    let currentFilterStatus = 'all';
+    let currentVideos = [];
+    let currentScriptData = null;
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      loadChannels();
+    });
+
+    // Toast
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => toast.classList.add('opacity-0'), 2200);
+    }
+
+    // Modals
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+      lucide.createIcons();
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    // Channels
+    async function loadChannels() {
+      try {
+        const res = await fetch('/api/channels');
+        channels = await res.json();
+        renderChannels();
+        if (channels.length > 0 && !currentChannelId) {
+          selectChannel(channels[0].id);
+        }
+      } catch (e) {
+        showToast('Erro ao carregar canais');
+      }
+    }
+
+    function renderChannels() {
+      const list = document.getElementById('channelList');
+      const count = document.getElementById('channelCount');
+      count.innerText = `${channels.length} canais`;
+
+      if (channels.length === 0) {
+        list.innerHTML = `<div class="text-xs text-slate-500 py-2">Nenhum canal adicionado ainda. Toque em "+ Canal".</div>`;
+        return;
+      }
+
+      list.innerHTML = channels.map(c => `
+        <div onclick="selectChannel('${c.id}')" class="shrink-0 flex items-center space-x-2 px-3 py-2 rounded-xl border transition-all cursor-pointer ${currentChannelId === c.id ? 'bg-cyan-500/15 border-cyan-400 text-white' : 'bg-slate-900 border-brand-border text-slate-400'}">
+          <img src="${c.avatar}" class="w-6 h-6 rounded-full object-cover bg-slate-800" onerror="this.src='https://api.dicebear.com/7.x/identicon/svg?seed=${c.id}'" />
+          <div class="max-w-[100px] truncate text-xs font-semibold">${c.name}</div>
+          <button onclick="deleteChannel(event, '${c.id}')" class="text-slate-500 hover:text-red-400 ml-1 p-0.5">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>
+          </button>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    function selectChannel(id) {
+      currentChannelId = id;
+      renderChannels();
+      const channel = channels.find(c => c.id === id);
+      if (channel) {
+        document.getElementById('currentChannelTitle').innerText = channel.name;
+        document.getElementById('btnSyncChannel').classList.remove('hidden');
+        loadVideos(id);
+      }
+    }
+
+    async function submitAddChannel() {
+      const input = document.getElementById('inputChannelUrl');
+      const val = input.value.trim();
+      if (!val) return showToast('Digite o link ou @ do canal');
+
+      const btn = document.getElementById('btnAddChannelSubmit');
+      btn.innerText = 'Puxando do YouTube...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/channels', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({url: val})
+        });
+        const data = await res.json();
+        if (res.ok) {
+          input.value = '';
+          closeModal('addChannelModal');
+          showToast('Canal adicionado com sucesso!');
+          await loadChannels();
+          selectChannel(data.id);
+        } else {
+          showToast(data.detail || 'Erro ao puxar canal');
+        }
+      } catch (e) {
+        showToast('Erro de conexão ao buscar canal');
+      } finally {
+        btn.innerText = 'Puxar Vídeos e Salvar';
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteChannel(e, id) {
+      e.stopPropagation();
+      if (!confirm('Deseja remover este canal?')) return;
+      try {
+        await fetch(`/api/channels/${id}`, {method: 'DELETE'});
+        showToast('Canal removido');
+        currentChannelId = null;
+        await loadChannels();
+      } catch (e) {
+        showToast('Erro ao remover canal');
+      }
+    }
+
+    async function syncCurrentChannel() {
+      if (!currentChannelId) return;
+      const icon = document.getElementById('syncIcon');
+      icon.classList.add('animate-spin');
+      showToast('Buscando novos vídeos...');
+      try {
+        const res = await fetch(`/api/channels/${currentChannelId}/sync`, {method: 'POST'});
+        const data = await res.json();
+        showToast(`Canal atualizado! ${data.count || 0} vídeos sincronizados`);
+        loadVideos(currentChannelId);
+      } catch (e) {
+        showToast('Erro ao sincronizar canal');
+      } finally {
+        icon.classList.remove('animate-spin');
+      }
+    }
+
+    // Videos
+    async function loadVideos(channelId) {
+      const container = document.getElementById('videoContainer');
+      container.innerHTML = `<div class="py-12 text-center text-xs text-slate-500"><div class="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>Carregando vídeos...</div>`;
+
+      try {
+        const res = await fetch(`/api/channels/${channelId}/videos?filter_type=${currentFilterType}&status=${currentFilterStatus}`);
+        currentVideos = await res.json();
+        renderVideos();
+      } catch (e) {
+        container.innerHTML = `<div class="text-center py-8 text-xs text-red-400">Erro ao carregar vídeos do canal.</div>`;
+      }
+    }
+
+    function renderVideos() {
+      const container = document.getElementById('videoContainer');
+      if (currentVideos.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500 text-xs">
+            Nenhum vídeo encontrado com os filtros selecionados.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = currentVideos.map(v => {
+        const min = Math.floor(v.duration / 60);
+        const sec = v.duration % 60;
+        const durStr = v.duration > 0 ? `${min}:${sec < 10 ? '0' : ''}${sec}` : (v.is_short ? 'Short' : 'Vídeo');
+        
+        let statusBadge = '';
+        if (v.status === 'posted') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Postado</span>';
+        } else if (v.status === 'downloaded') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">Baixado</span>';
+        } else {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">Pendente</span>';
+        }
+
+        return `
+          <div class="p-3 rounded-2xl bg-brand-card border border-brand-border space-y-3">
+            <div class="flex space-x-3">
+              <!-- Thumbnail -->
+              <div class="relative w-28 h-20 shrink-0 rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
+                <img src="${v.thumbnail}" class="w-full h-full object-cover" onerror="this.src='https://i.ytimg.com/vi/${v.id}/hqdefault.jpg'" />
+                <span class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[9px] font-bold text-white">${durStr}</span>
+                ${v.is_short ? '<span class="absolute top-1 left-1 px-1.5 py-0.2 rounded bg-red-600 text-[9px] font-extrabold text-white">SHORT</span>' : ''}
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 flex flex-col justify-between overflow-hidden">
+                <h4 class="text-xs font-semibold text-white line-clamp-2 leading-snug">${v.title}</h4>
+                <div class="flex items-center justify-between pt-1">
+                  <!-- Status dropdown/button -->
+                  <div onclick="cycleStatus('${v.id}', '${v.status}')" class="cursor-pointer active:scale-95 transition-transform">
+                    ${statusBadge}
+                  </div>
+                  <span class="text-[10px] text-slate-500">${v.published_at || ''}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+              <button onclick="openScriptModal('${v.id}', '${escapeQuotes(v.title)}', ${v.duration}, ${v.is_short})" class="py-2 px-3 rounded-xl bg-purple-600/15 border border-purple-500/30 text-purple-300 font-bold text-xs flex items-center justify-center space-x-1.5 active:scale-95 transition-transform">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-400"></i>
+                <span>Roteiro IA</span>
+              </button>
+
+              <button onclick="openDownloadModal('${v.id}', '${escapeQuotes(v.title)}')" class="py-2 px-3 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-bold text-xs flex items-center justify-center space-x-1.5 active:scale-95 transition-transform">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Baixar</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    function escapeQuotes(str) {
+      return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    async function cycleStatus(videoId, currentStatus) {
+      const order = ['pending', 'downloaded', 'posted'];
+      const next = order[(order.indexOf(currentStatus) + 1) % order.length];
+      try {
+        await fetch(`/api/videos/${videoId}/status`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({status: next})
+        });
+        const v = currentVideos.find(x => x.id === videoId);
+        if (v) v.status = next;
+        renderVideos();
+        showToast(`Status atualizado para: ${next === 'posted' ? 'Postado' : next === 'downloaded' ? 'Baixado' : 'Pendente'}`);
+      } catch (e) {
+        showToast('Erro ao atualizar status');
+      }
+    }
+
+    // Filter switching
+    function setTypeFilter(type) {
+      currentFilterType = type;
+      ['All', 'Video', 'Short'].forEach(t => {
+        const btn = document.getElementById(`btnFilter${t}`);
+        if (t.toLowerCase() === type) {
+          btn.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors bg-cyan-500 text-black shadow";
+        } else {
+          btn.className = "flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors text-slate-400 hover:text-white";
+        }
+      });
+      if (currentChannelId) loadVideos(currentChannelId);
+    }
+
+    function setStatusFilter(status) {
+      currentFilterStatus = status;
+      ['all', 'pending', 'downloaded', 'posted'].forEach(s => {
+        const el = document.getElementById(`status${s.charAt(0).toUpperCase() + s.slice(1)}`);
+        if (s === status) {
+          el.className = "px-3 py-1 rounded-full text-[11px] font-semibold border border-cyan-500/50 bg-cyan-500/10 text-cyan-300";
+        } else {
+          el.className = "px-3 py-1 rounded-full text-[11px] font-semibold border border-brand-border bg-slate-900 text-slate-400";
+        }
+      });
+      if (currentChannelId) loadVideos(currentChannelId);
+    }
+
+    // AI SCRIPT MODAL
+    async function openScriptModal(videoId, title, duration, isShort) {
+      openModal('scriptModal');
+      document.getElementById('scriptLoading').classList.remove('hidden');
+      document.getElementById('scriptContent').classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/videos/${videoId}/generate-script`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title, duration, is_short: isShort})
+        });
+        currentScriptData = await res.json();
+        
+        document.getElementById('hook1Text').innerText = currentScriptData.hook_1 || '';
+        document.getElementById('hook2Text').innerText = currentScriptData.hook_2 || '';
+        document.getElementById('hook3Text').innerText = currentScriptData.hook_3 || '';
+        document.getElementById('bodyText').innerText = currentScriptData.body || '';
+        document.getElementById('ctaText').innerText = currentScriptData.cta || '';
+        document.getElementById('thumbPromptText').innerText = currentScriptData.prompt_thumb || '';
+        document.getElementById('thumbOverlayText').innerText = currentScriptData.thumb_overlay_text || '';
+
+        document.getElementById('scriptLoading').classList.add('hidden');
+        document.getElementById('scriptContent').classList.remove('hidden');
+        lucide.createIcons();
+      } catch (e) {
+        showToast('Erro ao gerar roteiro');
+        closeModal('scriptModal');
+      }
+    }
+
+    function copyText(elemId) {
+      const text = document.getElementById(elemId).innerText;
+      navigator.clipboard.writeText(text);
+      showToast('Copiado para a área de transferência!');
+    }
+
+    function copyFullScript() {
+      if (!currentScriptData) return;
+      const full = `🎣 GANCHOS:\n1) ${currentScriptData.hook_1}\n2) ${currentScriptData.hook_2}\n3) ${currentScriptData.hook_3}\n\n📜 ROTEIRO:\n${currentScriptData.body}\n\n🎯 CTA:\n${currentScriptData.cta}\n\n🎨 CAPA PROMPT:\n${currentScriptData.prompt_thumb}\nTexto: ${currentScriptData.thumb_overlay_text}`;
+      navigator.clipboard.writeText(full);
+      showToast('Roteiro completo copiado!');
+    }
+
+    // DOWNLOAD MODAL
+    let currentDownloadVideoId = null;
+
+    async function openDownloadModal(videoId, title) {
+      currentDownloadVideoId = videoId;
+      openModal('downloadModal');
+      document.getElementById('downloadVideoTitle').innerText = title;
+      const list = document.getElementById('formatsList');
+      list.innerHTML = `
+        <div class="py-8 text-center text-xs text-cyan-400">
+          <div class="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          Puxando resoluções fiéis...
+        </div>
+      `;
+
+      try {
+        const res = await fetch(`/api/videos/${videoId}/formats`);
+        const formats = await res.json();
+        
+        list.innerHTML = formats.map(f => `
+          <a href="/api/videos/${videoId}/download?quality=${f.quality}&format_id=${encodeURIComponent(f.format_id || '')}" download class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-brand-border hover:border-cyan-400 active:scale-98 transition-all">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="${f.quality === 'audio' ? 'music' : 'video'}" class="w-4 h-4 text-cyan-400"></i>
+              <span class="text-xs font-bold text-white">${f.label}</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="text-[10px] text-slate-400">${f.size}</span>
+              <span class="px-2 py-1 rounded-lg bg-cyan-500 text-black font-extrabold text-[10px]">Baixar</span>
+            </div>
+          </a>
+        `).join('');
+        lucide.createIcons();
+      } catch (e) {
+        list.innerHTML = `<div class="text-xs text-red-400 py-4 text-center">Erro ao buscar resoluções.</div>`;
+      }
+    }
+  </script>
+</body>
+</html>
