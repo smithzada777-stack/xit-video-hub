@@ -257,26 +257,26 @@ async def download_video(video_id: str, quality: str = "720p", format_id: Option
     is_audio = quality == "audio"
     if is_audio:
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'format': '140/bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': output_template,
-            'extractor_args': {'youtube': {'player_client': ['android_vr', 'web']}},
+            'extractor_args': {'youtube': {'player_client': ['android_vr']}},
             'quiet': True,
             'no_warnings': True
         }
     else:
         if format_id and format_id.isdigit():
-            fmt = f"{format_id}/best[ext=mp4]/best"
+            fmt = f"{format_id}/22/18/best"
         elif quality == "1080p":
-            fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/22/18/best"
+            fmt = "bestvideo[height<=1080]+bestaudio/22/18/best"
         elif quality == "720p":
-            fmt = "22/bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/18/best"
+            fmt = "22/best[height<=720]/18/best"
         else:
-            fmt = "18/best[height<=480][ext=mp4]/best[ext=mp4]/best"
+            fmt = "18/best"
 
         ydl_opts = {
             'format': fmt,
             'outtmpl': output_template,
-            'extractor_args': {'youtube': {'player_client': ['android_vr', 'web']}},
+            'extractor_args': {'youtube': {'player_client': ['android_vr']}},
             'quiet': True,
             'no_warnings': True
         }
