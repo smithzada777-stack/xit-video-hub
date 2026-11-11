@@ -7,7 +7,7 @@ import unicodedata
 import requests
 from typing import Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -251,89 +251,58 @@ def remove_temp_file(path: str):
 @app.get("/api/videos/{video_id}/download")
 async def download_video(video_id: str, quality: str = "720p", format_id: Optional[str] = None, background_tasks: BackgroundTasks = BackgroundTasks()):
     url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    # Auto mark video as downloaded in DB
+    db.batch_update_tags([video_id], "downloaded")
+
+    fallback_download_url = f"https://ssyoutube.com/watch?v={video_id}"
     temp_dir = tempfile.gettempdir()
     output_template = os.path.join(temp_dir, f"xit_{video_id}_{uuid.uuid4().hex[:6]}.%(ext)s")
 
     is_audio = quality == "audio"
-    if is_audio:
-        ydl_opts = {
-            'format': '140/bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': output_template,
-            'extractor_args': {'youtube': {'player_client': ['android_vr']}},
-            'quiet': True,
-            'no_warnings': True
-        }
-    else:
-        if format_id and format_id.isdigit():
-            fmt = f"{format_id}/22/18/best"
-        elif quality == "1080p":
-            fmt = "bestvideo[height<=1080]+bestaudio/22/18/best"
-        elif quality == "720p":
-            fmt = "22/best[height<=720]/18/best"
-        else:
-            fmt = "18/best"
-
-        ydl_opts = {
-            'format': fmt,
-            'outtmpl': output_template,
-            'extractor_args': {'youtube': {'player_client': ['android_vr']}},
-            'quiet': True,
-            'no_warnings': True
-        }
-
-    clients_to_try = [['android_vr'], ['ios'], ['android'], ['tv'], ['mweb']]
-    last_err = None
-    info = None
-    actual_file = None
-
-    for client_list in clients_to_try:
-        ydl_opts['extractor_args'] = {'youtube': {'player_client': client_list}}
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                base_no_ext = os.path.splitext(filename)[0]
-
-                # Check candidates
-                for candidate in [filename, base_no_ext + ".mp4", base_no_ext + ".m4a", base_no_ext + ".webm", base_no_ext + ".mp3"]:
-                    if os.path.exists(candidate):
-                        actual_file = candidate
-                        break
-
-                if actual_file and os.path.exists(actual_file):
-                    last_err = None
-                    break
-        except Exception as e:
-            last_err = e
-            continue
-
-    if not actual_file or not os.path.exists(actual_file):
-        raise HTTPException(status_code=500, detail=f"Erro ao baixar: {str(last_err or 'Arquivo não gerado')}")
+    ydl_opts = {
+        'format': '140/bestaudio' if is_audio else '18/best' if quality != '1080p' else '22/best',
+        'outtmpl': output_template,
+        'extractor_args': {'youtube': {'player_client': ['android_vr']}},
+        'quiet': True,
+        'no_warnings': True,
+        'socket_timeout': 10
+    }
 
     try:
-        ext = os.path.splitext(actual_file)[1].lstrip('.') or ('mp3' if is_audio else 'mp4')
-        raw_title = (info.get("title") if info else None) or "video"
-        # Normalize and remove non-ascii/accents so HTTP header Content-Disposition is 100% valid ASCII
-        nfkd = unicodedata.normalize('NFKD', raw_title)
-        ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
-        clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
-        download_filename = f"{clean_title}.{ext}"
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            base_no_ext = os.path.splitext(filename)[0]
 
-        # Auto mark video as downloaded in DB
-        db.batch_update_tags([video_id], "downloaded")
+            actual_file = None
+            for candidate in [filename, base_no_ext + ".mp4", base_no_ext + ".m4a", base_no_ext + ".webm"]:
+                if os.path.exists(candidate) and os.path.getsize(candidate) > 1000:
+                    actual_file = candidate
+                    break
 
-        background_tasks.add_task(remove_temp_file, actual_file)
+            if not actual_file:
+                return RedirectResponse(url=fallback_download_url, status_code=302)
 
-        media_type = "audio/mpeg" if ext == "mp3" else "audio/mp4" if ext == "m4a" else "video/mp4"
+            ext = os.path.splitext(actual_file)[1].lstrip('.') or ('mp3' if is_audio else 'mp4')
+            raw_title = (info.get("title") if info else None) or "video"
+            nfkd = unicodedata.normalize('NFKD', raw_title)
+            ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+            clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
+            download_filename = f"{clean_title}.{ext}"
 
-        return FileResponse(
-            path=actual_file,
-            filename=download_filename,
-            media_type=media_type
-        )
+            background_tasks.add_task(remove_temp_file, actual_file)
+
+            media_type = "audio/mpeg" if ext == "mp3" else "audio/mp4" if ext == "m4a" else "video/mp4"
+
+            return FileResponse(
+                path=actual_file,
+                filename=download_filename,
+                media_type=media_type
+            )
     except Exception as e:
-        print(f"Download processing error: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
+        print(f"Server download throttled by YouTube, redirecting to direct resolver: {e}")
+        return RedirectResponse(url=fallback_download_url, status_code=302)
 
 if __name__ == "__main__":
     import uvicorn
