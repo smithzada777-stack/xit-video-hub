@@ -8,11 +8,36 @@ def clean_channel_url(input_str: str) -> str:
     if input_str.startswith("@"):
         return f"https://www.youtube.com/{input_str}"
     if not input_str.startswith("http"):
+        if input_str.startswith("UC"):
+            return f"https://www.youtube.com/channel/{input_str}"
         return f"https://www.youtube.com/@{input_str}"
     return input_str
 
 def get_channel_info(channel_input: str) -> Optional[Dict[str, Any]]:
-    url = clean_channel_url(channel_input)
+    input_str = channel_input.strip()
+    
+    # Check if user entered a video URL or shorts URL
+    if "watch?v=" in input_str or "youtu.be/" in input_str or "/shorts/" in input_str:
+        ydl_opts = {'quiet': True, 'skip_download': True, 'no_warnings': True}
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(input_str, download=False)
+                ch_id = info.get('channel_id')
+                ch_name = info.get('uploader') or info.get('channel') or "Canal YouTube"
+                ch_url = info.get('channel_url') or f"https://www.youtube.com/channel/{ch_id}"
+                avatar = f"https://api.dicebear.com/7.x/identicon/svg?seed={ch_id}"
+                return {
+                    "id": str(ch_id),
+                    "name": ch_name,
+                    "handle": ch_name,
+                    "avatar": avatar,
+                    "url": ch_url
+                }
+        except Exception as e:
+            print(f"Error extracting from video url: {e}")
+
+    # Standard Channel extraction
+    url = clean_channel_url(input_str)
     ydl_opts = {
         'extract_flat': True,
         'playlistend': 1,
@@ -28,7 +53,6 @@ def get_channel_info(channel_input: str) -> Optional[Dict[str, Any]]:
             channel_id = info.get('channel_id') or info.get('id') or re.sub(r'[^a-zA-Z0-9_-]', '', url.split('/')[-1])
             channel_name = info.get('channel') or info.get('uploader') or info.get('title') or "Canal YouTube"
             
-            # Clean title if it has " - Videos"
             if channel_name.endswith(" - Videos"):
                 channel_name = channel_name[:-9]
 
@@ -46,31 +70,25 @@ def get_channel_info(channel_input: str) -> Optional[Dict[str, Any]]:
             print(f"Error fetching channel info: {e}")
             return None
 
-def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 150) -> List[Dict[str, Any]]:
     clean_url = clean_channel_url(channel_url)
     videos = []
-
-    # Fetch both videos and shorts tabs
-    urls_to_check = [
-        (f"{clean_url}/videos", False),
-        (f"{clean_url}/shorts", True)
-    ]
+    seen_ids = set()
 
     ydl_opts = {
         'extract_flat': True,
-        'playlistend': limit // 2,
+        'playlistend': limit,
         'quiet': True,
         'no_warnings': True
     }
 
-    seen_ids = set()
-
-    for target_url, force_short in urls_to_check:
+    # 1. Primary Method: Official YouTube Uploads Playlist (UU...)
+    if channel_id and channel_id.startswith("UC"):
+        uploads_playlist_url = f"https://www.youtube.com/playlist?list=UU{channel_id[2:]}"
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(target_url, download=False)
-                entries = info.get('entries', []) if info else []
-                for entry in entries:
+                info = ydl.extract_info(uploads_playlist_url, download=False)
+                for entry in info.get('entries', []):
                     if not entry:
                         continue
                     v_id = entry.get('id')
@@ -79,9 +97,7 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 50
                     seen_ids.add(v_id)
 
                     duration = entry.get('duration') or 0
-                    is_short = force_short or (duration > 0 and duration <= 60) or ("/shorts/" in entry.get('url', ''))
-
-                    # Thumbnail
+                    is_short = (duration > 0 and duration <= 60) or ("/shorts/" in entry.get('url', ''))
                     thumbs = entry.get('thumbnails', [])
                     thumb_url = thumbs[-1]['url'] if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
 
@@ -93,11 +109,50 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 50
                         "thumbnail": thumb_url,
                         "is_short": is_short,
                         "status": "pending",
+                        "tags": "pending",
                         "url": f"https://www.youtube.com/watch?v={v_id}",
                         "published_at": entry.get('upload_date')
                     })
         except Exception as e:
-            print(f"Error fetching tab {target_url}: {e}")
+            print(f"Uploads playlist extraction error: {e}")
+
+    # 2. Secondary fallback / supplement: /videos and /shorts tabs
+    if len(videos) < 5:
+        tabs = [
+            (f"{clean_url}/videos", False),
+            (f"{clean_url}/shorts", True)
+        ]
+        for target_url, force_short in tabs:
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(target_url, download=False)
+                    for entry in info.get('entries', []):
+                        if not entry:
+                            continue
+                        v_id = entry.get('id')
+                        if not v_id or v_id in seen_ids:
+                            continue
+                        seen_ids.add(v_id)
+
+                        duration = entry.get('duration') or 0
+                        is_short = force_short or (duration > 0 and duration <= 60) or ("/shorts/" in entry.get('url', ''))
+                        thumbs = entry.get('thumbnails', [])
+                        thumb_url = thumbs[-1]['url'] if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
+                        videos.append({
+                            "id": v_id,
+                            "channel_id": channel_id,
+                            "title": entry.get('title') or "Sem título",
+                            "duration": int(duration),
+                            "thumbnail": thumb_url,
+                            "is_short": is_short,
+                            "status": "pending",
+                            "tags": "pending",
+                            "url": f"https://www.youtube.com/watch?v={v_id}",
+                            "published_at": entry.get('upload_date')
+                        })
+            except Exception as e:
+                pass
 
     return videos
 
@@ -113,7 +168,6 @@ def get_real_video_formats(video_id: str) -> List[Dict[str, Any]]:
             info = ydl.extract_info(url, download=False)
             formats = info.get('formats', [])
             
-            # Map best streams per height
             height_map = {}
             audio_format = None
 
@@ -123,11 +177,9 @@ def get_real_video_formats(video_id: str) -> List[Dict[str, Any]]:
                 vcodec = f.get('vcodec')
                 acodec = f.get('acodec')
 
-                # Check audio
                 if vcodec == 'none' and acodec != 'none':
                     audio_format = f
 
-                # Check video
                 if h and h in [1080, 720, 480, 360]:
                     if h not in height_map or (ext == 'mp4' and height_map[h].get('ext') != 'mp4'):
                         height_map[h] = f
@@ -158,7 +210,6 @@ def get_real_video_formats(video_id: str) -> List[Dict[str, Any]]:
         except Exception as e:
             print(f"Error extracting formats: {e}")
 
-    # Fallback default options if YouTube blocks formats inspection
     if not formats_list:
         formats_list = [
             {"quality": "1080p", "format_id": "bestvideo[height<=1080]+bestaudio/best[height<=1080]", "ext": "mp4", "label": "1080p Full HD", "size": "Fiel ao YouTube"},
@@ -182,8 +233,6 @@ def extract_subtitles_text(video_id: str) -> str:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
-            subs = info.get('subtitles') or info.get('automatic_captions') or {}
-            # Return empty string if no subs, ai_service will handle it
             return ""
         except Exception:
             return ""

@@ -170,6 +170,36 @@ async def update_status(video_id: str, payload: UpdateStatusRequest):
 async def get_formats(video_id: str):
     return get_real_video_formats(video_id)
 
+class UpdateTagsRequest(BaseModel):
+    tags: list[str]
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[str]
+
+class BatchTagsRequest(BaseModel):
+    ids: list[str]
+    tag: str
+
+@app.post("/api/videos/{video_id}/tags")
+async def update_video_tags_endpoint(video_id: str, payload: UpdateTagsRequest):
+    db.update_video_tags(video_id, payload.tags)
+    return {"status": "updated", "tags": payload.tags}
+
+@app.delete("/api/videos/{video_id}")
+async def delete_single_video(video_id: str):
+    db.delete_video(video_id)
+    return {"status": "deleted", "id": video_id}
+
+@app.post("/api/videos/batch-delete")
+async def batch_delete_videos(payload: BatchDeleteRequest):
+    db.delete_videos(payload.ids)
+    return {"status": "deleted", "count": len(payload.ids)}
+
+@app.post("/api/videos/batch-tags")
+async def batch_tags_videos(payload: BatchTagsRequest):
+    db.batch_update_tags(payload.ids, payload.tag)
+    return {"status": "updated", "count": len(payload.ids)}
+
 # API: Script Generation (with Anti-Repetition)
 @app.post("/api/videos/{video_id}/generate-script")
 async def generate_script(video_id: str, payload: GenerateScriptRequest):
