@@ -261,4 +261,21 @@ class Database:
         conn.close()
         return dict(row) if row else None
 
+    def get_all_scripts(self, limit: int = 50) -> List[Dict[str, Any]]:
+        if self.supabase_active:
+            try:
+                r = requests.get(f"{SUPABASE_URL}/rest/v1/scripts?select=*&order=created_at.desc&limit={limit}", headers=self.headers, timeout=5)
+                if r.status_code == 200:
+                    return r.json()
+            except Exception:
+                pass
+
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM scripts ORDER BY created_at DESC LIMIT ?", (limit,))
+        rows = [dict(row) for row in c.fetchall()]
+        conn.close()
+        return rows
+
 db = Database()

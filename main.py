@@ -183,6 +183,10 @@ async def generate_script(video_id: str, payload: GenerateScriptRequest):
     db.save_script(script_record)
     return generated
 
+@app.get("/api/scripts")
+async def get_all_scripts():
+    return db.get_all_scripts()
+
 # Video Downloader Endpoint
 def remove_temp_file(path: str):
     try:
