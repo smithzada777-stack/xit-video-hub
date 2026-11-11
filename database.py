@@ -30,9 +30,21 @@ class Database:
                 handle TEXT,
                 avatar TEXT,
                 url TEXT,
+                notes TEXT DEFAULT '',
+                is_favorite INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Migrate existing schema if needed
+        try:
+            c.execute("ALTER TABLE channels ADD COLUMN notes TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            c.execute("ALTER TABLE channels ADD COLUMN is_favorite INTEGER DEFAULT 0")
+        except Exception:
+            pass
+
         c.execute('''
             CREATE TABLE IF NOT EXISTS videos (
                 id TEXT PRIMARY KEY,
@@ -76,7 +88,7 @@ class Database:
     def get_channels(self) -> List[Dict[str, Any]]:
         if self.supabase_active:
             try:
-                r = requests.get(f"{SUPABASE_URL}/rest/v1/channels?select=*&order=created_at.desc", headers=self.headers, timeout=5)
+                r = requests.get(f"{SUPABASE_URL}/rest/v1/channels?select=*&order=is_favorite.desc,created_at.desc", headers=self.headers, timeout=5)
                 if r.status_code == 200:
                     return r.json()
             except Exception:
@@ -86,7 +98,7 @@ class Database:
         conn = sqlite3.connect(SQLITE_DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("SELECT * FROM channels ORDER BY created_at DESC")
+        c.execute("SELECT * FROM channels ORDER BY is_favorite DESC, created_at DESC")
         rows = [dict(row) for row in c.fetchall()]
         conn.close()
         return rows
@@ -103,11 +115,41 @@ class Database:
         conn = sqlite3.connect(SQLITE_DB_PATH)
         c = conn.cursor()
         c.execute('''
-            INSERT OR REPLACE INTO channels (id, name, handle, avatar, url)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (channel["id"], channel.get("name"), channel.get("handle"), channel.get("avatar"), channel.get("url")))
+            INSERT OR REPLACE INTO channels (id, name, handle, avatar, url, notes, is_favorite)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (channel["id"], channel.get("name"), channel.get("handle"), channel.get("avatar"), channel.get("url"), channel.get("notes", ""), channel.get("is_favorite", 0)))
         conn.commit()
         conn.close()
+
+    def update_channel_notes(self, channel_id: str, notes: str):
+        if self.supabase_active:
+            try:
+                requests.patch(f"{SUPABASE_URL}/rest/v1/channels?id=eq.{channel_id}", headers=self.headers, json={"notes": notes}, timeout=5)
+            except Exception:
+                pass
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute("UPDATE channels SET notes = ? WHERE id = ?", (notes, channel_id))
+        conn.commit()
+        conn.close()
+
+    def toggle_channel_favorite(self, channel_id: str) -> int:
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT is_favorite FROM channels WHERE id = ?", (channel_id,))
+        row = c.fetchone()
+        current = row[0] if row else 0
+        new_val = 0 if current == 1 else 1
+        c.execute("UPDATE channels SET is_favorite = ? WHERE id = ?", (new_val, channel_id))
+        conn.commit()
+        conn.close()
+
+        if self.supabase_active:
+            try:
+                requests.patch(f"{SUPABASE_URL}/rest/v1/channels?id=eq.{channel_id}", headers=self.headers, json={"is_favorite": new_val}, timeout=5)
+            except Exception:
+                pass
+        return new_val
 
     def delete_channel(self, channel_id: str):
         if self.supabase_active:

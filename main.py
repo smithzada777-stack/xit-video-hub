@@ -135,6 +135,19 @@ async def sync_channel(channel_id: str):
         db.save_videos(videos)
     return {"status": "synced", "count": len(videos)}
 
+class UpdateNotesRequest(BaseModel):
+    notes: str
+
+@app.post("/api/channels/{channel_id}/notes")
+async def update_channel_notes(channel_id: str, payload: UpdateNotesRequest):
+    db.update_channel_notes(channel_id, payload.notes)
+    return {"status": "ok", "notes": payload.notes}
+
+@app.post("/api/channels/{channel_id}/favorite")
+async def toggle_channel_favorite(channel_id: str):
+    new_val = db.toggle_channel_favorite(channel_id)
+    return {"status": "ok", "is_favorite": new_val}
+
 # API: Videos
 @app.get("/api/channels/{channel_id}/videos")
 async def get_channel_videos(channel_id: str, filter_type: str = "all", status: str = "all", sort_order: str = "asc"):
