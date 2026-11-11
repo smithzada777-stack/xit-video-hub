@@ -125,10 +125,12 @@ class Database:
         conn.close()
 
     # Videos
-    def get_videos(self, channel_id: Optional[str] = None, filter_type: str = "all", status: str = "all") -> List[Dict[str, Any]]:
+    def get_videos(self, channel_id: Optional[str] = None, filter_type: str = "all", status: str = "all", sort_order: str = "asc") -> List[Dict[str, Any]]:
+        order_direction = "asc" if sort_order == "asc" else "desc"
+        
         if self.supabase_active:
             try:
-                query = f"{SUPABASE_URL}/rest/v1/videos?select=*&order=created_at.desc"
+                query = f"{SUPABASE_URL}/rest/v1/videos?select=*&order=published_at.{order_direction}"
                 if channel_id:
                     query += f"&channel_id=eq.{channel_id}"
                 if filter_type == "video":
@@ -160,7 +162,7 @@ class Database:
         if status != "all":
             sql += " AND status = ?"
             params.append(status)
-        sql += " ORDER BY created_at DESC"
+        sql += f" ORDER BY CASE WHEN published_at IS NOT NULL AND published_at != '' THEN published_at ELSE rowid END {order_direction.upper()}"
         c.execute(sql, params)
         rows = [dict(row) for row in c.fetchall()]
         conn.close()

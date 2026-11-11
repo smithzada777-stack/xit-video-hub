@@ -137,13 +137,19 @@ async def sync_channel(channel_id: str):
 
 # API: Videos
 @app.get("/api/channels/{channel_id}/videos")
-async def get_channel_videos(channel_id: str, filter_type: str = "all", status: str = "all"):
-    return db.get_videos(channel_id=channel_id, filter_type=filter_type, status=status)
+async def get_channel_videos(channel_id: str, filter_type: str = "all", status: str = "all", sort_order: str = "asc"):
+    return db.get_videos(channel_id=channel_id, filter_type=filter_type, status=status, sort_order=sort_order)
+
+@app.get("/api/channels/{channel_id}/stats")
+async def get_channel_stats(channel_id: str):
+    all_v = db.get_videos(channel_id=channel_id, filter_type="all")
+    total = len(all_v)
+    shorts = len([v for v in all_v if v.get("is_short")])
+    videos = total - shorts
+    return {"total": total, "videos": videos, "shorts": shorts}
 
 @app.post("/api/videos/{video_id}/status")
 async def update_status(video_id: str, payload: UpdateStatusRequest):
-    if payload.status not in ["pending", "downloaded", "posted"]:
-        raise HTTPException(status_code=400, detail="Status inválido")
     db.update_video_status(video_id, payload.status)
     return {"status": "updated", "new_status": payload.status}
 
@@ -157,6 +163,7 @@ async def generate_script(video_id: str, payload: GenerateScriptRequest):
     # Check if already generated
     cached = db.get_script_by_video(video_id)
     if cached:
+        db.update_video_status(video_id, "scripted")
         return cached
 
     # Get history of past titles/hooks so it won't repeat
@@ -181,6 +188,8 @@ async def generate_script(video_id: str, payload: GenerateScriptRequest):
         "prompt_thumb": generated.get("prompt_thumb")
     }
     db.save_script(script_record)
+    # Auto mark video as scripted!
+    db.update_video_status(video_id, "scripted")
     return generated
 
 @app.get("/api/scripts")
