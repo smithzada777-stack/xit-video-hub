@@ -1,0 +1,13 @@
+name: Keep Alive 24/7
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Service
+        run: curl -sSf https://xit-video-hub.onrender.com/healthz || true

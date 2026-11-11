@@ -2,6 +2,8 @@ import os
 import shutil
 import tempfile
 import uuid
+import asyncio
+import requests
 from typing import Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -22,6 +24,22 @@ from youtube_service import (
 from ai_service import generate_viral_content
 
 app = FastAPI(title="XIT Studio", version="1.0.0")
+
+# Automatic keep-alive task so server never hibernates
+async def keep_alive_loop():
+    await asyncio.sleep(60) # wait for startup
+    app_url = os.getenv("RENDER_EXTERNAL_URL", "https://xit-video-hub.onrender.com")
+    ping_url = f"{app_url}/healthz"
+    while True:
+        try:
+            requests.get(ping_url, timeout=10)
+        except Exception:
+            pass
+        await asyncio.sleep(480) # ping every 8 minutes
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(keep_alive_loop())
 
 app.add_middleware(
     CORSMiddleware,
