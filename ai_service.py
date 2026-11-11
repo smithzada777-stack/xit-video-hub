@@ -3,7 +3,7 @@ import json
 import requests
 from typing import Dict, Any, List
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6IAvNMQ39pkqOu8B5VdSz7bCAMGejmDB98Iyd7w2xvv9Q")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 MODELS = [
     "gemini-3.8-flash",

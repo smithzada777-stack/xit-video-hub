@@ -4,8 +4,8 @@ import requests
 import json
 from typing import List, Dict, Any, Optional
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://krjnktqcwwatogtygarl.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_secret_fyQNKmppCO90GCsYH_sAtw_RGeXP-DI")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "xit_data.db")
 
 class Database:
