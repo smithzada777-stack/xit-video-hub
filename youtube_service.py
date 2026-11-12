@@ -4,7 +4,15 @@ import yt_dlp
 from typing import List, Dict, Any, Optional
 
 def clean_channel_url(input_str: str) -> str:
-    input_str = input_str.strip()
+    input_str = input_str.strip().rstrip('/')
+    
+    # Strip any subtab suffix like /videos, /shorts, /featured, /streams, /community, /playlists
+    sub_tabs = ['/videos', '/shorts', '/featured', '/streams', '/community', '/playlists']
+    for tab in sub_tabs:
+        if input_str.endswith(tab):
+            input_str = input_str[:-len(tab)].rstrip('/')
+            break
+
     if input_str.startswith("@"):
         return f"https://www.youtube.com/{input_str}"
     if not input_str.startswith("http"):
@@ -110,10 +118,14 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 20
                     synth_rank = total_entries - idx
                     pub_date = entry.get('upload_date') or f"idx_{synth_rank:04d}"
 
+                    title = entry.get('title') or "Sem título"
+                    if title.endswith(" - Videos") or title.endswith(" - Shorts"):
+                        continue
+
                     videos.append({
                         "id": v_id,
                         "channel_id": channel_id,
-                        "title": entry.get('title') or "Sem título",
+                        "title": title,
                         "duration": int(duration),
                         "thumbnail": thumb_url,
                         "is_short": force_short,
@@ -148,10 +160,14 @@ def fetch_videos_from_channel(channel_url: str, channel_id: str, limit: int = 20
                     synth_rank = total_entries - idx
                     pub_date = entry.get('upload_date') or f"idx_{synth_rank:04d}"
 
+                    title = entry.get('title') or "Sem título"
+                    if title.endswith(" - Videos") or title.endswith(" - Shorts"):
+                        continue
+
                     videos.append({
                         "id": v_id,
                         "channel_id": channel_id,
-                        "title": entry.get('title') or "Sem título",
+                        "title": title,
                         "duration": int(duration),
                         "thumbnail": thumb_url,
                         "is_short": is_short,
