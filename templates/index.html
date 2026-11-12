@@ -691,6 +691,8 @@
         lucide.createIcons();
       }
     }
+    async function toggleFavorite(e, id) {
+      if (e) e.stopPropagation();
       try {
         const res = await fetch(`/api/channels/${id}/favorite`, {method: 'POST'});
         const data = await res.json();
