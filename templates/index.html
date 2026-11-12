@@ -415,18 +415,40 @@
         </div>
       </div>
 
-      <!-- Opção de Download Direto 1080p / Alta Velocidade -->
-      <a id="btnExternalDownload" href="#" target="_blank" onclick="markCurrentVideoDownloaded()" class="w-full flex items-center justify-between p-2.5 rounded-xl bg-white text-black font-bold text-xs active:scale-98 transition-all">
-        <span class="flex items-center space-x-1.5">
-          <span>⚡</span>
-          <span>Download Alternativo (1080p / Rápido)</span>
-        </span>
-        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-      </a>
-
       <div class="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400 flex items-start space-x-2">
         <i data-lucide="smartphone" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-white"></i>
-        <span>No <strong>iPhone / Safari / PWA</strong>: ao baixar, o arquivo vai para o aplicativo <em>Arquivos &gt; Downloads</em>, onde você pode compartilhar ou <em>Salvar Vídeo</em> no Fotos!</span>
+        <span>No <strong>iPhone / PWA</strong>: após o processamento, abrirá a opção para <strong>Salvar diretamente na sua Galeria de Fotos</strong>!</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SALVAR NA GALERIA / FOTOS DO IPHONE -->
+  <div id="saveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
+    <div class="w-full max-w-xs rounded-2xl bg-zinc-900 border border-zinc-800 p-5 shadow-2xl text-center space-y-4">
+      <div class="w-12 h-12 rounded-full bg-white text-black mx-auto flex items-center justify-center text-xl font-bold">
+        <i data-lucide="check" class="w-6 h-6 text-black"></i>
+      </div>
+      <div>
+        <h3 class="text-sm font-bold text-white">Vídeo Pronto!</h3>
+        <p id="modalSaveFilename" class="text-[11px] text-zinc-400 truncate mt-1"></p>
+      </div>
+      <div class="space-y-2 pt-1">
+        <button 
+          type="button" 
+          id="modalSaveBtn"
+          onclick="sharePreparedFile()" 
+          class="w-full py-3 px-4 rounded-xl bg-white text-black font-bold text-xs flex items-center justify-center space-x-2 active:scale-95 transition-all"
+        >
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Salvar nas Fotos do iPhone</span>
+        </button>
+        <button 
+          type="button" 
+          onclick="closeModal('saveModal')" 
+          class="w-full py-2.5 px-4 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-medium transition-colors"
+        >
+          Fechar
+        </button>
       </div>
     </div>
   </div>
@@ -1259,15 +1281,30 @@
       }
     }
 
+    let preparedFile = null;
+    let preparedFilename = '';
+
+    async function sharePreparedFile() {
+      if (!preparedFile) return;
+      try {
+        await navigator.share({
+          files: [preparedFile],
+          title: preparedFilename
+        });
+        closeModal('saveModal');
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+        }
+      }
+    }
+
     async function openDownloadModal(videoId, title) {
       currentDownloadingVideoId = videoId;
       openModal('downloadModal');
       document.getElementById('downloadVideoTitle').innerText = title;
       const notice = document.getElementById('downloadStatusNotice');
       if (notice) notice.classList.add('hidden');
-      
-      const extBtn = document.getElementById('btnExternalDownload');
-      if (extBtn) extBtn.href = `https://ssyoutube.com/watch?v=${videoId}`;
       
       const list = document.getElementById('formatsList');
       list.innerHTML = `
@@ -1298,7 +1335,7 @@
       }
     }
 
-    function executeRealDownload(btn, videoId, quality, formatId) {
+    async function executeRealDownload(btn, videoId, quality, formatId) {
       const originalHtml = btn.innerHTML;
       btn.innerHTML = `<div class="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto"></div>`;
       btn.disabled = true;
@@ -1306,10 +1343,8 @@
       const notice = document.getElementById('downloadStatusNotice');
       if (notice) {
         notice.classList.remove('hidden');
-        document.getElementById('downloadNoticeText').innerText = `Processando download (${quality})...`;
+        document.getElementById('downloadNoticeText').innerText = `Baixando no servidor (${quality})...`;
       }
-
-      const downloadUrl = `/api/videos/${videoId}/download?quality=${quality}&format_id=${formatId}`;
 
       // Mark as downloaded in UI right away
       const v = currentVideos.find(x => x.id === videoId);
@@ -1319,26 +1354,53 @@
         renderVideos();
       }
 
-      // Native browser/PWA trigger: direct window navigation or download anchor
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', '');
-      link.target = '_self';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const downloadUrl = `/api/videos/${videoId}/download?quality=${quality}&format_id=${formatId}`;
 
-      setTimeout(() => {
-        btn.innerHTML = `<span class="text-emerald-400 text-xs font-bold">✓ Enviado</span>`;
-        if (notice) {
-          document.getElementById('downloadNoticeText').innerText = `Download iniciado no seu aparelho!`;
+      try {
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error('Falha no download');
+
+        let filename = 'video.mp4';
+        const disposition = response.headers.get('content-disposition');
+        if (disposition && disposition.indexOf('filename=') !== -1) {
+          const match = disposition.match(/filename="?([^";]+)"?/);
+          if (match && match[1]) filename = match[1];
         }
-        showToast('Download enviado! Verifique seu navegador/downloads.');
-        setTimeout(() => {
-          btn.innerHTML = originalHtml;
-          btn.disabled = false;
-        }, 4000);
-      }, 1500);
+
+        const blob = await response.blob();
+        const mimeType = quality === 'audio' ? 'audio/mpeg' : 'video/mp4';
+        preparedFile = new File([blob], filename, { type: mimeType });
+        preparedFilename = filename;
+
+        closeModal('downloadModal');
+
+        // Se for iPhone ou dispositivo com suporte a salvar arquivos direto na galeria/fotos:
+        if (navigator.canShare && navigator.canShare({ files: [preparedFile] })) {
+          document.getElementById('modalSaveFilename').innerText = filename;
+          openModal('saveModal');
+          lucide.createIcons();
+        } else {
+          // Fallback para PC / Android: salva direto no Downloads
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.style.display = 'none';
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(blobUrl);
+          }, 2000);
+          showToast('Download concluído com sucesso!');
+        }
+      } catch (err) {
+        showToast('Erro ao processar o download. Tente outra resolução.');
+      } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        if (notice) notice.classList.add('hidden');
+      }
     }
   </script>
 </body>

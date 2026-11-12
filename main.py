@@ -14,6 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import yt_dlp
+try:
+    import imageio_ffmpeg
+    FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception:
+    FFMPEG_PATH = None
 
 from database import db
 from youtube_service import (
@@ -271,54 +276,76 @@ async def download_video(video_id: str, quality: str = "720p", format_id: Option
     # Auto mark video as downloaded in DB
     db.batch_update_tags([video_id], "downloaded")
 
-    fallback_download_url = f"https://ssyoutube.com/watch?v={video_id}"
     temp_dir = tempfile.gettempdir()
-    output_template = os.path.join(temp_dir, f"xit_{video_id}_{uuid.uuid4().hex[:6]}.%(ext)s")
+    temp_id = uuid.uuid4().hex[:8]
+    output_template = os.path.join(temp_dir, f"xit_{temp_id}.%(ext)s")
 
     is_audio = quality == "audio"
+    ext = "mp3" if is_audio else "mp4"
+    final_file = os.path.join(temp_dir, f"xit_{temp_id}.{ext}")
+
     ydl_opts = {
-        'format': '140/bestaudio' if is_audio else '18/best' if quality != '1080p' else '22/best',
         'outtmpl': output_template,
-        'extractor_args': {'youtube': {'player_client': ['android_vr']}},
         'quiet': True,
         'no_warnings': True,
-        'socket_timeout': 10
+        'socket_timeout': 30,
     }
+    if FFMPEG_PATH:
+        ydl_opts['ffmpeg_location'] = FFMPEG_PATH
+
+    if is_audio:
+        ydl_opts['format'] = 'bestaudio/best'
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
+    else:
+        ydl_opts['merge_output_format'] = 'mp4'
+        if quality == '360p':
+            ydl_opts['format'] = 'bestvideo[height<=360]+bestaudio/best[height<=360]/best'
+        elif quality == '1080p':
+            ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'
+        else:
+            ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            base_no_ext = os.path.splitext(filename)[0]
 
-            actual_file = None
-            for candidate in [filename, base_no_ext + ".mp4", base_no_ext + ".m4a", base_no_ext + ".webm"]:
-                if os.path.exists(candidate) and os.path.getsize(candidate) > 1000:
-                    actual_file = candidate
+        actual_file = None
+        if os.path.exists(final_file) and os.path.getsize(final_file) > 1000:
+            actual_file = final_file
+        else:
+            for f in os.listdir(temp_dir):
+                if f.startswith(f"xit_{temp_id}") and os.path.getsize(os.path.join(temp_dir, f)) > 1000:
+                    actual_file = os.path.join(temp_dir, f)
                     break
 
-            if not actual_file:
-                return RedirectResponse(url=fallback_download_url, status_code=302)
+        if not actual_file or not os.path.exists(actual_file):
+            raise HTTPException(status_code=500, detail="Não foi possível processar o download do vídeo.")
 
-            ext = os.path.splitext(actual_file)[1].lstrip('.') or ('mp3' if is_audio else 'mp4')
-            raw_title = (info.get("title") if info else None) or "video"
-            nfkd = unicodedata.normalize('NFKD', raw_title)
-            ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
-            clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
-            download_filename = f"{clean_title}.{ext}"
+        raw_title = (info.get("title") if info else None) or "video"
+        nfkd = unicodedata.normalize('NFKD', raw_title)
+        ascii_title = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+        clean_title = "".join(c for c in ascii_title if c.isalnum() or c in (' ', '_', '-')).strip() or "video"
+        download_filename = f"{clean_title}.{ext}"
 
-            background_tasks.add_task(remove_temp_file, actual_file)
+        background_tasks.add_task(remove_temp_file, actual_file)
 
-            media_type = "audio/mpeg" if ext == "mp3" else "audio/mp4" if ext == "m4a" else "video/mp4"
+        media_type = "audio/mpeg" if is_audio else "video/mp4"
 
-            return FileResponse(
-                path=actual_file,
-                filename=download_filename,
-                media_type=media_type
-            )
+        return FileResponse(
+            path=actual_file,
+            filename=download_filename,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
     except Exception as e:
-        print(f"Server download throttled by YouTube, redirecting to direct resolver: {e}")
-        return RedirectResponse(url=fallback_download_url, status_code=302)
+        raise HTTPException(status_code=500, detail=f"Erro ao baixar: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
