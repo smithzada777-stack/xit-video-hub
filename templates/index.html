@@ -152,14 +152,14 @@
           </button>
         </div>
 
-        <!-- FILTROS DE TAGS (RECOLHÍVEL, COMPACTO) -->
+        <!-- FILTROS DE TAGS (RECOLHÍVEL, COMPACTO COM CONTADORES REAIS) -->
         <div id="statusFiltersRow" class="flex items-center space-x-1 overflow-x-auto hide-scrollbar py-0.5">
-          <button onclick="setStatusFilter('all')" id="tagAll" class="px-2.5 py-1 rounded-md text-[10px] font-bold border border-white bg-white text-black shrink-0">Todas Tags</button>
-          <button onclick="setStatusFilter('pending')" id="tagPending" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">⏳ Pendente</button>
-          <button onclick="setStatusFilter('downloaded')" id="tagDownloaded" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">⬇️ Baixado</button>
-          <button onclick="setStatusFilter('editing')" id="tagEditing" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">✂️ Editando</button>
-          <button onclick="setStatusFilter('scripted')" id="tagScripted" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">📝 Roteirizado</button>
-          <button onclick="setStatusFilter('posted')" id="tagPosted" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">✅ Postado</button>
+          <button onclick="setStatusFilter('all')" id="tagAll" class="px-2.5 py-1 rounded-md text-[10px] font-bold border border-white bg-white text-black shrink-0">Todas (<span id="tagCountAll">0</span>)</button>
+          <button onclick="setStatusFilter('pending')" id="tagPending" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">⏳ Pendente (<span id="tagCountPending">0</span>)</button>
+          <button onclick="setStatusFilter('downloaded')" id="tagDownloaded" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">⬇️ Baixado (<span id="tagCountDownloaded">0</span>)</button>
+          <button onclick="setStatusFilter('editing')" id="tagEditing" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">✂️ Editando (<span id="tagCountEditing">0</span>)</button>
+          <button onclick="setStatusFilter('scripted')" id="tagScripted" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">📝 Roteirizado (<span id="tagCountScripted">0</span>)</button>
+          <button onclick="setStatusFilter('posted')" id="tagPosted" class="px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0">✅ Postado (<span id="tagCountPosted">0</span>)</button>
         </div>
       </div>
 
@@ -390,64 +390,32 @@
     </div>
   </div>
 
-  <!-- MODAL: DOWNLOAD REAL E DIRETO (CENTRALIZADO, COMPACTO, SEM BARRAS FAKES) -->
-  <div id="downloadModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden" onclick="closeModal('downloadModal')">
-    <div class="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl p-4 space-y-3.5 shadow-2xl" onclick="event.stopPropagation()">
-      <div class="flex items-center justify-between border-b border-zinc-900 pb-2">
-        <h3 class="font-bold text-xs text-white uppercase tracking-wider">Baixar Vídeo</h3>
-        <button onclick="closeModal('downloadModal')" class="text-zinc-500 p-1 hover:text-white">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <p class="text-xs text-zinc-300 font-medium line-clamp-2" id="downloadVideoTitle">Identificando vídeo...</p>
-
-      <!-- Feedback de download -->
-      <div id="downloadStatusNotice" class="hidden p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-center space-y-1.5">
-        <div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
-        <p class="text-xs text-white font-bold" id="downloadNoticeText">Preparando download...</p>
-        <p class="text-[10px] text-zinc-400">O download iniciará no seu aparelho. Confirme o aviso do navegador.</p>
-      </div>
-
-      <div id="formatsList" class="space-y-1.5">
-        <div class="py-6 text-center text-xs text-zinc-500">
-          Carregando resoluções...
-        </div>
-      </div>
-
-      <div class="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400 flex items-start space-x-2">
-        <i data-lucide="smartphone" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-white"></i>
-        <span>No <strong>iPhone / PWA</strong>: após o processamento, abrirá a opção para <strong>Salvar diretamente na sua Galeria de Fotos</strong>!</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: SALVAR NA GALERIA / FOTOS DO IPHONE -->
-  <div id="saveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
-    <div class="w-full max-w-xs rounded-2xl bg-zinc-900 border border-zinc-800 p-5 shadow-2xl text-center space-y-4">
+  <!-- MODAL: CONFIRMAÇÃO DE DOWNLOAD -->
+  <div id="confirmDownloadModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none" onclick="closeModal('confirmDownloadModal')">
+    <div class="w-full max-w-xs rounded-2xl bg-zinc-900 border border-zinc-800 p-5 shadow-2xl text-center space-y-4" onclick="event.stopPropagation()">
       <div class="w-12 h-12 rounded-full bg-white text-black mx-auto flex items-center justify-center text-xl font-bold">
-        <i data-lucide="check" class="w-6 h-6 text-black"></i>
+        <i data-lucide="help-circle" class="w-6 h-6 text-black"></i>
       </div>
       <div>
-        <h3 class="text-sm font-bold text-white">Vídeo Pronto!</h3>
-        <p id="modalSaveFilename" class="text-[11px] text-zinc-400 truncate mt-1"></p>
+        <h3 class="text-sm font-bold text-white">Você conseguiu baixar?</h3>
+        <p class="text-[11px] text-zinc-400 mt-1 line-clamp-2" id="confirmDownloadVideoTitle">O link foi copiado para sua área de transferência.</p>
+        <p class="text-[10px] text-zinc-500 mt-0.5">Se marcou 'Sim', o vídeo sai da lista principal e vai para a aba 'Baixado'.</p>
       </div>
       <div class="space-y-2 pt-1">
         <button 
           type="button" 
-          id="modalSaveBtn"
-          onclick="sharePreparedFile()" 
+          onclick="confirmDownloadSuccess(true)" 
           class="w-full py-3 px-4 rounded-xl bg-white text-black font-bold text-xs flex items-center justify-center space-x-2 active:scale-95 transition-all"
         >
-          <i data-lucide="download" class="w-4 h-4"></i>
-          <span>Salvar nas Fotos do iPhone</span>
+          <i data-lucide="check-circle" class="w-4 h-4"></i>
+          <span>Sim, marcar como Baixado</span>
         </button>
         <button 
           type="button" 
-          onclick="closeModal('saveModal')" 
+          onclick="confirmDownloadSuccess(false)" 
           class="w-full py-2.5 px-4 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-medium transition-colors"
         >
-          Fechar
+          Não / Tentar depois
         </button>
       </div>
     </div>
@@ -460,10 +428,10 @@
 
   <script>
     let channels = [];
-    let currentChannelId = null;
-    let currentFilterType = 'all';
-    let currentFilterStatus = 'all';
-    let currentSortOrder = 'asc'; // Prioridade: mais antigos primeiro
+    let currentChannelId = localStorage.getItem('xit_channel_id') || null;
+    let currentFilterType = localStorage.getItem('xit_filter_type') || 'all';
+    let currentFilterStatus = localStorage.getItem('xit_filter_status') || 'all';
+    let currentSortOrder = localStorage.getItem('xit_sort_order') || 'asc';
     let currentVideos = [];
     let currentScriptData = null;
     let currentTab = 'videos';
@@ -481,7 +449,47 @@
       { id: 'posted', label: 'Postado', icon: '✅', badgeClass: 'text-white bg-zinc-600 border-zinc-400 font-bold' }
     ];
 
+    function applySavedPreferencesUi() {
+      // Sort Order UI
+      const sortLabel = document.getElementById('sortLabelShort');
+      const sortIcon = document.getElementById('sortIcon');
+      if (sortLabel && sortIcon) {
+        if (currentSortOrder === 'asc') {
+          sortLabel.innerText = 'Antigos';
+          sortIcon.setAttribute('data-lucide', 'arrow-up');
+        } else {
+          sortLabel.innerText = 'Recentes';
+          sortIcon.setAttribute('data-lucide', 'arrow-down');
+        }
+      }
+
+      // Type Filter UI
+      ['All', 'Video', 'Short'].forEach(t => {
+        const btn = document.getElementById(`btnFilter${t}`);
+        if (btn) {
+          if (t.toLowerCase() === currentFilterType) {
+            btn.className = "flex-1 py-1 text-[11px] font-bold rounded-md bg-white text-black shadow transition-all";
+          } else {
+            btn.className = "flex-1 py-1 text-[11px] font-medium rounded-md text-app-muted hover:text-white transition-all";
+          }
+        }
+      });
+
+      // Status Filter UI
+      ['all', 'pending', 'downloaded', 'editing', 'scripted', 'posted'].forEach(s => {
+        const el = document.getElementById(`tag${s.charAt(0).toUpperCase() + s.slice(1)}`);
+        if (el) {
+          if (s === currentFilterStatus) {
+            el.className = "px-2.5 py-1 rounded-md text-[10px] font-bold border border-white bg-white text-black shrink-0";
+          } else {
+            el.className = "px-2 py-1 rounded-md text-[10px] font-medium border border-app-border bg-app-card text-app-muted shrink-0";
+          }
+        }
+      });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+      applySavedPreferencesUi();
       lucide.createIcons();
       loadChannels();
       setupChannelSwipeGestures();
@@ -490,6 +498,7 @@
     // Toggle Sort Order
     function toggleSortOrder() {
       currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+      localStorage.setItem('xit_sort_order', currentSortOrder);
       const label = document.getElementById('sortLabelShort');
       const icon = document.getElementById('sortIcon');
 
@@ -594,6 +603,7 @@
 
     function selectChannel(id) {
       currentChannelId = id;
+      localStorage.setItem('xit_channel_id', id);
       const c = channels.find(x => x.id === id);
       const idx = channels.findIndex(x => x.id === id);
       if (c) {
@@ -736,6 +746,20 @@
         document.getElementById('countAll').innerText = stats.total;
         document.getElementById('countVideos').innerText = stats.videos;
         document.getElementById('countShorts').innerText = stats.shorts;
+        if (stats.tags) {
+          const countAllEl = document.getElementById('tagCountAll');
+          if (countAllEl) countAllEl.innerText = stats.total;
+          const countPendingEl = document.getElementById('tagCountPending');
+          if (countPendingEl) countPendingEl.innerText = stats.tags.pending || 0;
+          const countDownloadedEl = document.getElementById('tagCountDownloaded');
+          if (countDownloadedEl) countDownloadedEl.innerText = stats.tags.downloaded || 0;
+          const countEditingEl = document.getElementById('tagCountEditing');
+          if (countEditingEl) countEditingEl.innerText = stats.tags.editing || 0;
+          const countScriptedEl = document.getElementById('tagCountScripted');
+          if (countScriptedEl) countScriptedEl.innerText = stats.tags.scripted || 0;
+          const countPostedEl = document.getElementById('tagCountPosted');
+          if (countPostedEl) countPostedEl.innerText = stats.tags.posted || 0;
+        }
       } catch (e) {}
     }
 
@@ -952,7 +976,7 @@
               <span>Roteiro IA</span>
             </button>
 
-            <button onclick="openDownloadModal('${v.id}', '${escapeQuotes(v.title)}')" class="py-1 px-2 rounded-lg bg-app-surface border border-app-border text-white font-medium text-xs flex items-center justify-center space-x-1 active:scale-95">
+            <button onclick="handleDownloadClick('${v.id}', '${escapeQuotes(v.title)}')" class="py-1 px-2 rounded-lg bg-app-surface border border-app-border text-white font-medium text-xs flex items-center justify-center space-x-1 active:scale-95">
               <i data-lucide="download" class="w-3 h-3 text-white"></i>
               <span>Baixar</span>
             </button>
@@ -1134,12 +1158,15 @@
     // Filters
     function setTypeFilter(type) {
       currentFilterType = type;
+      localStorage.setItem('xit_filter_type', type);
       ['All', 'Video', 'Short'].forEach(t => {
         const btn = document.getElementById(`btnFilter${t}`);
-        if (t.toLowerCase() === type) {
-          btn.className = "flex-1 py-1 text-[11px] font-bold rounded-md bg-white text-black shadow transition-all";
-        } else {
-          btn.className = "flex-1 py-1 text-[11px] font-medium rounded-md text-app-muted hover:text-white transition-all";
+        if (btn) {
+          if (t.toLowerCase() === type) {
+            btn.className = "flex-1 py-1 text-[11px] font-bold rounded-md bg-white text-black shadow transition-all";
+          } else {
+            btn.className = "flex-1 py-1 text-[11px] font-medium rounded-md text-app-muted hover:text-white transition-all";
+          }
         }
       });
       if (currentChannelId) loadVideos(currentChannelId);
@@ -1147,6 +1174,7 @@
 
     function setStatusFilter(status) {
       currentFilterStatus = status;
+      localStorage.setItem('xit_filter_status', status);
       ['all', 'pending', 'downloaded', 'editing', 'scripted', 'posted'].forEach(s => {
         const el = document.getElementById(`tag${s.charAt(0).toUpperCase() + s.slice(1)}`);
         if (el) {
@@ -1267,140 +1295,59 @@
       showToast('Roteiro completo copiado!');
     }
 
-    // DOWNLOAD MODAL
-    let currentDownloadingVideoId = null;
+    // DOWNLOAD COM REDIRECIONAMENTO E CONFIRMAÇÃO
+    let pendingConfirmVideoId = null;
 
-    function markCurrentVideoDownloaded() {
-      if (currentDownloadingVideoId) {
-        const v = currentVideos.find(x => x.id === currentDownloadingVideoId);
-        if (v) {
-          if (!Array.isArray(v.tags)) v.tags = [v.tags || 'pending'];
-          if (!v.tags.includes('downloaded')) v.tags.push('downloaded');
-          renderVideos();
-        }
-      }
-    }
+    function handleDownloadClick(videoId, title) {
+      pendingConfirmVideoId = videoId;
+      const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    let preparedFile = null;
-    let preparedFilename = '';
-
-    async function sharePreparedFile() {
-      if (!preparedFile) return;
+      // Copia link do YouTube automaticamente para a área de transferência
       try {
-        await navigator.share({
-          files: [preparedFile],
-          title: preparedFilename
-        });
-        closeModal('saveModal');
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error(err);
-        }
-      }
-    }
-
-    async function openDownloadModal(videoId, title) {
-      currentDownloadingVideoId = videoId;
-      openModal('downloadModal');
-      document.getElementById('downloadVideoTitle').innerText = title;
-      const notice = document.getElementById('downloadStatusNotice');
-      if (notice) notice.classList.add('hidden');
-      
-      const list = document.getElementById('formatsList');
-      list.innerHTML = `
-        <div class="py-6 text-center text-xs text-zinc-500">
-          Carregando qualidades...
-        </div>
-      `;
-
-      try {
-        const res = await fetch(`/api/videos/${videoId}/formats`);
-        const formats = await res.json();
-        
-        list.innerHTML = formats.map(f => `
-          <button onclick="executeRealDownload(this, '${videoId}', '${f.quality}', '${encodeURIComponent(f.format_id || '')}')" class="w-full flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white active:scale-98 transition-all">
-            <div class="flex items-center space-x-2">
-              <i data-lucide="${f.quality === 'audio' ? 'music' : 'video'}" class="w-4 h-4 text-white"></i>
-              <span class="text-xs font-semibold text-white">${f.label}</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <span class="text-[10px] text-zinc-400">${f.size}</span>
-              <span class="px-3 py-1 rounded-lg bg-white text-black font-bold text-[10px] shrink-0">Baixar</span>
-            </div>
-          </button>
-        `).join('');
-        lucide.createIcons();
-      } catch (e) {
-        list.innerHTML = `<div class="text-xs text-red-400 py-4 text-center">Erro ao buscar resoluções.</div>`;
-      }
-    }
-
-    async function executeRealDownload(btn, videoId, quality, formatId) {
-      const originalHtml = btn.innerHTML;
-      btn.innerHTML = `<div class="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto"></div>`;
-      btn.disabled = true;
-
-      const notice = document.getElementById('downloadStatusNotice');
-      if (notice) {
-        notice.classList.remove('hidden');
-        document.getElementById('downloadNoticeText').innerText = `Baixando no servidor (${quality})...`;
-      }
-
-      // Mark as downloaded in UI right away
-      const v = currentVideos.find(x => x.id === videoId);
-      if (v) {
-        if (!Array.isArray(v.tags)) v.tags = [v.tags || 'pending'];
-        if (!v.tags.includes('downloaded')) v.tags.push('downloaded');
-        renderVideos();
-      }
-
-      const downloadUrl = `/api/videos/${videoId}/download?quality=${quality}&format_id=${formatId}`;
-
-      try {
-        const response = await fetch(downloadUrl);
-        if (!response.ok) throw new Error('Falha no download');
-
-        let filename = 'video.mp4';
-        const disposition = response.headers.get('content-disposition');
-        if (disposition && disposition.indexOf('filename=') !== -1) {
-          const match = disposition.match(/filename="?([^";]+)"?/);
-          if (match && match[1]) filename = match[1];
-        }
-
-        const blob = await response.blob();
-        const mimeType = quality === 'audio' ? 'audio/mpeg' : 'video/mp4';
-        preparedFile = new File([blob], filename, { type: mimeType });
-        preparedFilename = filename;
-
-        closeModal('downloadModal');
-
-        // Se for iPhone ou dispositivo com suporte a salvar arquivos direto na galeria/fotos:
-        if (navigator.canShare && navigator.canShare({ files: [preparedFile] })) {
-          document.getElementById('modalSaveFilename').innerText = filename;
-          openModal('saveModal');
-          lucide.createIcons();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(youtubeUrl);
         } else {
-          // Fallback para PC / Android: salva direto no Downloads
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.style.display = 'none';
-          link.href = blobUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(blobUrl);
-          }, 2000);
-          showToast('Download concluído com sucesso!');
+          const t = document.createElement("textarea");
+          t.value = youtubeUrl;
+          document.body.appendChild(t);
+          t.select();
+          document.execCommand('copy');
+          document.body.removeChild(t);
         }
       } catch (err) {
-        showToast('Erro ao processar o download. Tente outra resolução.');
-      } finally {
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-        if (notice) notice.classList.add('hidden');
+        console.error("Erro ao copiar link:", err);
       }
+
+      // Abre o site de download recomendado em nova aba
+      window.open('https://app.ytdown.to/pt32/', '_blank');
+
+      // Abre modal de confirmação no sistema
+      const titleEl = document.getElementById('confirmDownloadVideoTitle');
+      if (titleEl) titleEl.innerText = title;
+      openModal('confirmDownloadModal');
+    }
+
+    async function confirmDownloadSuccess(didDownload) {
+      closeModal('confirmDownloadModal');
+      if (!pendingConfirmVideoId) return;
+
+      if (didDownload) {
+        try {
+          await fetch(`/api/videos/${pendingConfirmVideoId}/tags`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tags: ['downloaded']})
+          });
+          showToast('✓ Marcado como Baixado!');
+          if (currentChannelId) {
+            loadVideos(currentChannelId);
+            loadChannelStats(currentChannelId);
+          }
+        } catch (e) {
+          showToast('Erro ao atualizar status');
+        }
+      }
+      pendingConfirmVideoId = null;
     }
   </script>
 </body>

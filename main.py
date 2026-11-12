@@ -177,11 +177,26 @@ async def get_channel_videos(channel_id: str, filter_type: str = "all", status: 
 
 @app.get("/api/channels/{channel_id}/stats")
 async def get_channel_stats(channel_id: str):
-    all_v = db.get_videos(channel_id=channel_id, filter_type="all")
+    all_v = db.get_videos(channel_id=channel_id, filter_type="all", status="all_inclusive")
     total = len(all_v)
     shorts = len([v for v in all_v if v.get("is_short")])
     videos = total - shorts
-    return {"total": total, "videos": videos, "shorts": shorts}
+    
+    tag_counts = {"pending": 0, "downloaded": 0, "editing": 0, "scripted": 0, "posted": 0}
+    for v in all_v:
+        v_tags = v.get("tags") or ["pending"]
+        if isinstance(v_tags, str):
+            v_tags = [t.strip() for t in v_tags.split(",") if t.strip()]
+        for t in tag_counts.keys():
+            if t in v_tags:
+                tag_counts[t] += 1
+
+    return {
+        "total": total,
+        "videos": videos,
+        "shorts": shorts,
+        "tags": tag_counts
+    }
 
 @app.post("/api/videos/{video_id}/status")
 async def update_status(video_id: str, payload: UpdateStatusRequest):

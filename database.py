@@ -200,7 +200,11 @@ class Database:
                         raw_tags = row.get("tags") or row.get("status") or "pending"
                         tag_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
                         row["tags"] = tag_list if tag_list else ["pending"]
-                    if status != "all":
+                    if status == "all":
+                        rows = [row for row in rows if "downloaded" not in row["tags"]]
+                    elif status == "downloaded":
+                        rows = [row for row in rows if "downloaded" in row["tags"]]
+                    elif status != "all_inclusive":
                         rows = [row for row in rows if status in row["tags"]]
                     return rows
             except Exception:
@@ -219,7 +223,11 @@ class Database:
             sql += " AND is_short = 0"
         elif filter_type == "short":
             sql += " AND is_short = 1"
-        if status != "all":
+        if status == "all":
+            sql += " AND (tags NOT LIKE '%downloaded%' AND status != 'downloaded')"
+        elif status == "downloaded":
+            sql += " AND (tags LIKE '%downloaded%' OR status = 'downloaded')"
+        elif status != "all_inclusive":
             sql += " AND (tags LIKE ? OR status = ?)"
             params.append(f"%{status}%")
             params.append(status)
@@ -292,6 +300,12 @@ class Database:
         conn.close()
 
     def delete_video(self, video_id: str):
+        if self.supabase_active:
+            try:
+                requests.delete(f"{SUPABASE_URL}/rest/v1/videos?id=eq.{video_id}", headers=self.headers, timeout=5)
+                requests.delete(f"{SUPABASE_URL}/rest/v1/scripts?video_id=eq.{video_id}", headers=self.headers, timeout=5)
+            except Exception:
+                pass
         conn = sqlite3.connect(SQLITE_DB_PATH)
         c = conn.cursor()
         c.execute("DELETE FROM videos WHERE id = ?", (video_id,))
@@ -302,6 +316,13 @@ class Database:
     def delete_videos(self, video_ids: List[str]):
         if not video_ids:
             return
+        if self.supabase_active:
+            try:
+                ids_param = f"in.({','.join(video_ids)})"
+                requests.delete(f"{SUPABASE_URL}/rest/v1/videos?id={ids_param}", headers=self.headers, timeout=5)
+                requests.delete(f"{SUPABASE_URL}/rest/v1/scripts?video_id={ids_param}", headers=self.headers, timeout=5)
+            except Exception:
+                pass
         conn = sqlite3.connect(SQLITE_DB_PATH)
         c = conn.cursor()
         placeholders = ",".join("?" for _ in video_ids)
@@ -313,6 +334,11 @@ class Database:
     def update_video_tags(self, video_id: str, tags: List[str]):
         tags_str = ",".join(tags) if tags else "pending"
         primary_status = tags[0] if tags else "pending"
+        if self.supabase_active:
+            try:
+                requests.patch(f"{SUPABASE_URL}/rest/v1/videos?id=eq.{video_id}", headers=self.headers, json={"tags": tags_str, "status": primary_status}, timeout=5)
+            except Exception:
+                pass
         conn = sqlite3.connect(SQLITE_DB_PATH)
         c = conn.cursor()
         c.execute("UPDATE videos SET tags = ?, status = ? WHERE id = ?", (tags_str, primary_status, video_id))
@@ -332,6 +358,11 @@ class Database:
                 current.append(tag_to_add)
             tags_str = ",".join(current)
             c.execute("UPDATE videos SET tags = ?, status = ? WHERE id = ?", (tags_str, tag_to_add, vid))
+            if self.supabase_active:
+                try:
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/videos?id=eq.{vid}", headers=self.headers, json={"tags": tags_str, "status": tag_to_add}, timeout=5)
+                except Exception:
+                    pass
         conn.commit()
         conn.close()
 
