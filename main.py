@@ -46,7 +46,7 @@ async def auto_seed_default_channel():
             default_url = "https://www.youtube.com/channel/UCoAnxQ-zx7r-HoccMErZnng"
             info = get_channel_info(default_url)
             if info:
-                db.add_channel(info["id"], info["name"], info["handle"], info["avatar"], info["url"])
+                db.save_channel(info)
                 videos = fetch_videos_from_channel(info["url"], info["id"], limit=150)
                 if videos:
                     db.save_videos(videos)
