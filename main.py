@@ -38,9 +38,25 @@ async def keep_alive_loop():
             pass
         await asyncio.sleep(480) # ping every 8 minutes
 
+async def auto_seed_default_channel():
+    await asyncio.sleep(2)
+    try:
+        channels = db.get_channels()
+        if not channels:
+            default_url = "https://www.youtube.com/channel/UCoAnxQ-zx7r-HoccMErZnng"
+            info = get_channel_info(default_url)
+            if info:
+                db.add_channel(info["id"], info["name"], info["handle"], info["avatar"], info["url"])
+                videos = fetch_videos_from_channel(info["url"], info["id"], limit=150)
+                if videos:
+                    db.save_videos(videos)
+    except Exception as e:
+        print(f"Auto-seed error: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(keep_alive_loop())
+    asyncio.create_task(auto_seed_default_channel())
 
 app.add_middleware(
     CORSMiddleware,
