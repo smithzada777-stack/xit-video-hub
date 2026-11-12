@@ -182,7 +182,7 @@ async def get_channel_stats(channel_id: str):
     shorts = len([v for v in all_v if v.get("is_short")])
     videos = total - shorts
     
-    tag_counts = {"pending": 0, "downloaded": 0, "editing": 0, "scripted": 0, "posted": 0}
+    tag_counts = {"queue": 0, "pending": 0, "downloaded": 0, "editing": 0, "scripted": 0, "posted": 0}
     for v in all_v:
         v_tags = v.get("tags") or ["pending"]
         if isinstance(v_tags, str):
@@ -197,6 +197,17 @@ async def get_channel_stats(channel_id: str):
         "shorts": shorts,
         "tags": tag_counts
     }
+
+@app.get("/api/settings")
+async def get_app_settings_endpoint():
+    return db.get_app_settings()
+
+@app.post("/api/settings")
+async def save_app_settings_endpoint(payload: dict):
+    current = db.get_app_settings()
+    current.update(payload)
+    db.save_app_settings(current)
+    return current
 
 @app.post("/api/videos/{video_id}/status")
 async def update_status(video_id: str, payload: UpdateStatusRequest):

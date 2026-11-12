@@ -99,7 +99,7 @@ class Database:
     def get_channels(self) -> List[Dict[str, Any]]:
         if self.supabase_active:
             try:
-                r = requests.get(f"{SUPABASE_URL}/rest/v1/channels?select=*&order=is_favorite.desc,created_at.desc", headers=self.headers, timeout=5)
+                r = requests.get(f"{SUPABASE_URL}/rest/v1/channels?id=neq.__app_settings__&select=*&order=is_favorite.desc,created_at.desc", headers=self.headers, timeout=5)
                 if r.status_code == 200:
                     return r.json()
             except Exception:
@@ -109,7 +109,7 @@ class Database:
         conn = sqlite3.connect(SQLITE_DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("SELECT * FROM channels ORDER BY is_favorite DESC, created_at DESC")
+        c.execute("SELECT * FROM channels WHERE id != '__app_settings__' ORDER BY is_favorite DESC, created_at DESC")
         rows = [dict(row) for row in c.fetchall()]
         conn.close()
         return rows
@@ -441,5 +441,64 @@ class Database:
         rows = [dict(row) for row in c.fetchall()]
         conn.close()
         return rows
+
+    # Global App Settings & User State Persisted in Supabase
+    def get_app_settings(self) -> Dict[str, Any]:
+        default_settings = {
+            "channel_id": None,
+            "filter_type": "all",
+            "filter_status": "all",
+            "sort_order": "asc",
+            "pending_download": None
+        }
+        if self.supabase_active:
+            try:
+                r = requests.get(f"{SUPABASE_URL}/rest/v1/channels?id=eq.__app_settings__", headers=self.headers, timeout=5)
+                if r.status_code == 200 and r.json():
+                    row = r.json()[0]
+                    notes = row.get("notes")
+                    if notes:
+                        data = json.loads(notes)
+                        default_settings.update(data)
+                        return default_settings
+            except Exception as e:
+                print(f"Supabase get_app_settings error: {e}")
+
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT notes FROM channels WHERE id = '__app_settings__'")
+        row = c.fetchone()
+        conn.close()
+        if row and row[0]:
+            try:
+                data = json.loads(row[0])
+                default_settings.update(data)
+                return default_settings
+            except Exception:
+                pass
+        return default_settings
+
+    def save_app_settings(self, settings: Dict[str, Any]):
+        settings_json = json.dumps(settings)
+        if self.supabase_active:
+            try:
+                headers = dict(self.headers)
+                headers["Prefer"] = "resolution=merge-duplicates"
+                requests.post(f"{SUPABASE_URL}/rest/v1/channels?on_conflict=id", headers=headers, json={
+                    "id": "__app_settings__",
+                    "name": "App Settings",
+                    "notes": settings_json
+                }, timeout=5)
+            except Exception as e:
+                print(f"Supabase save_app_settings error: {e}")
+
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            INSERT OR REPLACE INTO channels (id, name, notes)
+            VALUES ('__app_settings__', 'App Settings', ?)
+        ''', (settings_json,))
+        conn.commit()
+        conn.close()
 
 db = Database()
