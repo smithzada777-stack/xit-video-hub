@@ -118,7 +118,9 @@ class Database:
         # Save in Supabase
         if self.supabase_active:
             try:
-                requests.post(f"{SUPABASE_URL}/rest/v1/channels", headers=self.headers, json=channel, timeout=5)
+                headers = dict(self.headers)
+                headers["Prefer"] = "resolution=merge-duplicates"
+                requests.post(f"{SUPABASE_URL}/rest/v1/channels?on_conflict=id", headers=headers, json=channel, timeout=5)
             except Exception:
                 pass
 
@@ -181,7 +183,30 @@ class Database:
     def get_videos(self, channel_id: Optional[str] = None, filter_type: str = "all", status: str = "all", sort_order: str = "asc") -> List[Dict[str, Any]]:
         order_direction = "asc" if sort_order == "asc" else "desc"
 
-        # SQLite
+        # Try Supabase first
+        if self.supabase_active:
+            try:
+                url = f"{SUPABASE_URL}/rest/v1/videos?select=*&order=created_at.{order_direction}"
+                if channel_id:
+                    url += f"&channel_id=eq.{channel_id}"
+                if filter_type == "video":
+                    url += "&is_short=eq.0"
+                elif filter_type == "short":
+                    url += "&is_short=eq.1"
+                r = requests.get(url, headers=self.headers, timeout=5)
+                if r.status_code == 200 and r.json():
+                    rows = r.json()
+                    for row in rows:
+                        raw_tags = row.get("tags") or row.get("status") or "pending"
+                        tag_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+                        row["tags"] = tag_list if tag_list else ["pending"]
+                    if status != "all":
+                        rows = [row for row in rows if status in row["tags"]]
+                    return rows
+            except Exception:
+                pass
+
+        # SQLite fallback
         conn = sqlite3.connect(SQLITE_DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
@@ -214,6 +239,37 @@ class Database:
     def save_videos(self, videos: List[Dict[str, Any]]):
         if not videos:
             return
+
+        # Save to Supabase
+        if self.supabase_active:
+            try:
+                supabase_rows = []
+                for v in videos:
+                    tags_val = v.get("tags")
+                    if isinstance(tags_val, list):
+                        tags_str = ",".join(tags_val)
+                    else:
+                        tags_str = tags_val or v.get("status") or "pending"
+                    supabase_rows.append({
+                        "id": v["id"],
+                        "channel_id": v.get("channel_id"),
+                        "title": v.get("title"),
+                        "duration": v.get("duration", 0),
+                        "thumbnail": v.get("thumbnail"),
+                        "is_short": 1 if v.get("is_short") else 0,
+                        "status": v.get("status", "pending"),
+                        "tags": tags_str,
+                        "url": v.get("url"),
+                        "published_at": v.get("published_at")
+                    })
+                headers = dict(self.headers)
+                headers["Prefer"] = "resolution=merge-duplicates"
+                # Batch in chunks of 50
+                for i in range(0, len(supabase_rows), 50):
+                    batch = supabase_rows[i:i+50]
+                    requests.post(f"{SUPABASE_URL}/rest/v1/videos?on_conflict=id", headers=headers, json=batch, timeout=25)
+            except Exception as e:
+                print(f"Supabase save_videos error: {e}")
 
         conn = sqlite3.connect(SQLITE_DB_PATH)
         c = conn.cursor()
